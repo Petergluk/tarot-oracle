@@ -1,3 +1,4 @@
+
 {
   "name": "mystic-tarot-oracle",
   "private": true,
@@ -6,10 +7,13 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "node server.js"
   },
   "dependencies": {
     "@google/genai": "*",
+    "express": "^4.18.2",
+    "http-proxy-middleware": "^2.0.6",
     "lucide-react": "^0.344.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

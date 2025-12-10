@@ -323,22 +323,25 @@ const App: React.FC = () => {
   );
 
   const renderError = () => (
-      <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-6 animate-fade-in">
-          <div className="bg-slate-900 border border-red-900/50 w-full max-w-lg p-8 rounded-lg shadow-2xl text-center relative overflow-hidden">
-               <div className="absolute inset-0 bg-red-900/10 animate-pulse pointer-events-none"></div>
-               <div className="relative z-10 flex flex-col items-center">
-                   <AlertTriangle className="w-16 h-16 text-red-500 mb-4" />
-                   <h2 className="font-serif text-2xl text-red-200 mb-2">Космические Помехи</h2>
-                   <p className="text-slate-400 mb-6 font-light">
+      <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-slate-900 border border-red-900/50 w-full max-w-lg rounded-lg shadow-2xl text-center relative flex flex-col max-h-[90vh]">
+               <div className="absolute inset-0 bg-red-900/10 animate-pulse pointer-events-none rounded-lg"></div>
+               
+               <div className="relative z-10 flex flex-col items-center p-6 sm:p-8 overflow-y-auto">
+                   <AlertTriangle className="w-12 h-12 sm:w-16 sm:h-16 text-red-500 mb-4 shrink-0" />
+                   <h2 className="font-serif text-xl sm:text-2xl text-red-200 mb-2 shrink-0">Космические Помехи</h2>
+                   <p className="text-slate-400 mb-6 font-light text-sm sm:text-base shrink-0">
                        Связь с астралом была прервана. Возможно, звезды встали не так, или исчерпан лимит энергии.
                    </p>
                    
-                   <div className="bg-black/50 p-4 rounded border border-slate-800 mb-8 w-full text-left">
-                       <p className="text-xs text-slate-500 uppercase tracking-widest mb-1">Техническая причина:</p>
-                       <p className="text-red-400 font-mono text-sm break-words">{error}</p>
+                   <div className="bg-black/50 p-4 rounded border border-slate-800 mb-6 w-full text-left shrink-0 flex flex-col max-h-48 sm:max-h-60">
+                       <p className="text-xs text-slate-500 uppercase tracking-widest mb-2 shrink-0">Техническая причина:</p>
+                       <div className="overflow-y-auto pr-2">
+                           <p className="text-red-400 font-mono text-xs break-words whitespace-pre-wrap">{error}</p>
+                       </div>
                    </div>
 
-                   <div className="flex gap-4 w-full">
+                   <div className="flex gap-3 sm:gap-4 w-full shrink-0 mt-auto">
                        <button 
                            onClick={resetApp}
                            className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-bold uppercase tracking-widest rounded transition-colors text-xs"
@@ -498,8 +501,10 @@ const App: React.FC = () => {
     <main className="bg-slate-950 min-h-screen text-slate-200 selection:bg-amber-500/30 overflow-x-hidden font-sans relative">
       {/* SECRET TRIGGER AREA (Top Left) */}
       <div 
-        className="fixed top-0 left-0 w-16 h-16 z-[60] cursor-default"
+        className="fixed top-0 left-0 w-16 h-16 z-[60] cursor-default select-none"
         onClick={handleSecretClick}
+        onMouseDown={(e) => e.preventDefault()} // Prevent text selection on repeated clicks
+        onDoubleClick={(e) => e.preventDefault()} // Prevent double click selection
         title="" // No title to keep it secret
       />
 

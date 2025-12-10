@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { DrawnCard, Spread } from "../types";
 
@@ -43,7 +44,10 @@ const getClient = (index: number = currentKeyIndex) => {
   // Wrap index around if it exceeds length
   const safeIndex = index % apiKeys.length;
   const key = apiKeys[safeIndex];
-  return new GoogleGenAI({ apiKey: key });
+  
+  // Use relative URL for proxying through our own server to hide IP and bypass regional blocks.
+  // The server (server.js) forwards '/google-api' -> 'https://generativelanguage.googleapis.com'
+  return new GoogleGenAI({ apiKey: key, baseUrl: '/google-api' });
 };
 
 // --- CONFIGURATION ---
