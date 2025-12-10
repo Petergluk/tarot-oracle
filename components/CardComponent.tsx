@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { DrawnCard, Suit, ArcanaType } from '../types';
 import { 
@@ -64,7 +63,9 @@ const CardComponent: React.FC<CardComponentProps> = ({ card, isRevealed, onClick
     setImageLoaded(false);
   }, [card.id]);
 
-  const imagePath = `/cards/${card.id}.jpg`;
+  const folder = card.arcana === ArcanaType.MAJOR ? 'major' : 'minor';
+  // Note: we assume file names in constants.ts match exact filenames in public/cards/major or public/cards/minor
+  const imagePath = `/cards/${folder}/${card.imageFileName}`;
 
   return (
     <div 
@@ -103,7 +104,7 @@ const CardComponent: React.FC<CardComponentProps> = ({ card, isRevealed, onClick
 
            {/* 2. Main Image Area */}
            <div className="flex-1 relative bg-slate-200 overflow-hidden flex items-center justify-center">
-              {/* Image Container with 1:1 Aspect Ratio Preservation logic or Cover */}
+              {/* Image Container */}
               {!imageError ? (
                 <div className={`relative w-full h-full transition-opacity duration-500 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}>
                   <img 
@@ -111,7 +112,10 @@ const CardComponent: React.FC<CardComponentProps> = ({ card, isRevealed, onClick
                     alt={card.nameRu}
                     className={`w-full h-full object-cover transition-transform duration-700 ${card.isReversed ? 'rotate-180' : ''}`}
                     onLoad={() => setImageLoaded(true)}
-                    onError={() => setImageError(true)}
+                    onError={(e) => {
+                        console.error(`CardComponent: Failed to load image at ${imagePath}. Please check if the file exists in /public/cards/${folder}/`);
+                        setImageError(true);
+                    }}
                   />
                   {/* Reversed Indicator Overlay (Subtle) */}
                   {card.isReversed && (
@@ -131,6 +135,7 @@ const CardComponent: React.FC<CardComponentProps> = ({ card, isRevealed, onClick
                   <span className="text-[10px] text-slate-400 mt-2 flex items-center gap-1">
                     <ImageOff className="w-3 h-3" /> art missing
                   </span>
+                  <span className="text-[8px] text-red-300 max-w-full truncate px-2 mt-1">{imagePath}</span>
                 </div>
               )}
            </div>
@@ -143,10 +148,6 @@ const CardComponent: React.FC<CardComponentProps> = ({ card, isRevealed, onClick
                  {card.nameRu}
                </h3>
              </div>
-             {/* Optional Keyword for quick reading */}
-             {/* <p className="text-[9px] text-slate-600 mt-0.5 italic truncate max-w-full px-2">
-               {card.description.split(',')[0]}
-             </p> */}
            </div>
 
         </div>

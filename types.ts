@@ -19,7 +19,7 @@ export interface TarotCard {
   suit: Suit;
   arcana: ArcanaType;
   description: string; // Brief keyword description
-  imagePrompt?: string; // For potential image generation, unused for now
+  imageFileName: string; // Exact filename from assets
 }
 
 export interface SpreadPosition {

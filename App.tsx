@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Loader2, Sparkles, Send, RefreshCw, ChevronRight, BrainCircuit, Eye, ChevronDown, Settings, X, Save, AlertTriangle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -170,6 +169,11 @@ const App: React.FC = () => {
 
   const handleRetry = () => {
       setError(null);
+      // Если ошибка произошла на этапе чтения (интерпретации),
+      // возвращаем состояние 'revealing', чтобы сработал триггер useEffect
+      if (appState === 'reading') {
+          setAppState('revealing');
+      }
       setRetryTrigger(prev => prev + 1); // Trigger useEffect
   };
 
@@ -334,9 +338,9 @@ const App: React.FC = () => {
                        Связь с астралом была прервана. Возможно, звезды встали не так, или исчерпан лимит энергии.
                    </p>
                    
-                   <div className="bg-black/50 p-4 rounded border border-slate-800 mb-6 w-full text-left shrink-0 flex flex-col max-h-48 sm:max-h-60">
+                   <div className="bg-black/50 p-4 rounded border border-slate-800 mb-6 w-full text-left shrink-0 flex flex-col max-h-60 sm:max-h-80">
                        <p className="text-xs text-slate-500 uppercase tracking-widest mb-2 shrink-0">Техническая причина:</p>
-                       <div className="overflow-y-auto pr-2">
+                       <div className="overflow-y-auto pr-2 custom-scrollbar">
                            <p className="text-red-400 font-mono text-xs break-words whitespace-pre-wrap">{error}</p>
                        </div>
                    </div>
@@ -352,7 +356,7 @@ const App: React.FC = () => {
                            onClick={handleRetry}
                            className="flex-1 py-3 bg-red-900/80 hover:bg-red-800 text-red-100 font-bold uppercase tracking-widest rounded transition-colors text-xs flex items-center justify-center gap-2"
                        >
-                           <RefreshCw className="w-4 h-4" /> Повторить
+                           <RefreshCw className="w-4 h-4" /> {appState === 'reading' ? 'Повторить запрос' : 'Повторить'}
                        </button>
                    </div>
                </div>
