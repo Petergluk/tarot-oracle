@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: mystic-tarot-oracle
+    runtime: static
+    buildCommand: npm install && npm run build 
+    staticPublishPath: ./dist
+    envVars:
+      - key: VITE_API_KEYS
+        sync: false # Enter keys separated by commas: key1,key2,key3
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: no-cache
