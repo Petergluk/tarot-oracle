@@ -9,7 +9,7 @@ const IMAGE_MAP: Record<string, string> = {
   'major_2': '03_the_high_priestess.jpg',
   'major_3': '04_the_empress.jpg',
   'major_4': '05_the_emperor.jpg',
-  'major_5': '06_hierophant.jpg', // Removed 'the_'
+  'major_5': '06_the_hierophant.jpg', 
   'major_6': '07_the_lovers.jpg',
   'major_7': '08_the_chariot.jpg',
   'major_8': '09_strength.jpg',
@@ -30,7 +30,7 @@ const IMAGE_MAP: Record<string, string> = {
   // Wands
   'ace_of_wands': '01_ace_of_wands.jpg',
   'two_of_wands': '02_two_of_wands.jpg',
-  'three_of_wands': '03_three_of_wands.jpg',
+  'three_of_wands': '03_wands_three.jpg', // Swapped based on failure
   'four_of_wands': '04_four_of_wands.jpg',
   'five_of_wands': '05_five_of_wands.jpg',
   'six_of_wands': '06_six_of_wands.jpg',
@@ -44,7 +44,7 @@ const IMAGE_MAP: Record<string, string> = {
   'king_of_wands': '14_king_of_wands.jpg',
 
   // Cups
-  'ace_of_cups': '15_ace_of_cups.jpg',
+  'ace_of_cups': '15_cups_ace.jpg', // Swapped based on failure
   'two_of_cups': '16_two_of_cups.jpg',
   'three_of_cups': '17_three_of_cups.jpg',
   'four_of_cups': '18_four_of_cups.jpg',
@@ -62,13 +62,13 @@ const IMAGE_MAP: Record<string, string> = {
   // Swords
   'ace_of_swords': '29_swords_ace.jpg', // Swapped
   'two_of_swords': '30_swords_two.jpg',
-  'three_of_swords': '31_swords_three_png.jpg',
+  'three_of_swords': '31_swords_three.jpg', // Removed _png suffix and swapped
   'four_of_swords': '32_swords_four.jpg',
   'five_of_swords': '33_swords_five.jpg',
   'six_of_swords': '34_swords_six.jpg',
   'seven_of_swords': '35_swords_seven.jpg', // Swapped
   'eight_of_swords': '36_eight_of_swords.jpg',
-  'nine_of_swords': '37_nine_of_swords.jpg',
+  'nine_of_swords': '37_swords_nine.jpg', // Swapped based on failure
   'ten_of_swords': '38_swords_ten.jpg',
   'page_of_swords': '39_swords_page.jpg', // Swapped
   'knight_of_swords': '40_swords_knight.jpg',
@@ -78,7 +78,7 @@ const IMAGE_MAP: Record<string, string> = {
   // Pentacles
   'ace_of_pentacles': '43_ace_of_pentacles.jpg',
   'two_of_pentacles': '44_pentacles_two.jpg',
-  'three_of_pentacles': '45_three_of_pentacles.jpg',
+  'three_of_pentacles': '45_pentacles_three.jpg', // Swapped based on failure
   'four_of_pentacles': '46_pentacles_four.jpg',
   'five_of_pentacles': '47_pentacles_five.jpg',
   'six_of_pentacles': '48_six_of_pentacles.jpg',
