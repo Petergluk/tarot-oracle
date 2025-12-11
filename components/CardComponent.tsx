@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { DrawnCard, Suit, ArcanaType } from '../types';
 import { 
@@ -85,11 +84,10 @@ const CardComponent: React.FC<CardComponentProps> = ({ card, isRevealed, onClick
   }, [card.id]);
 
   // Determine Folder Path Logic
-  // Major Arcana -> /cards/major/
-  // Minor Arcana -> /cards/[suit]/ (e.g., /cards/wands/)
+  // User confirmed structure: /major/ and /minor/
   const folder = card.arcana === ArcanaType.MAJOR 
     ? 'major' 
-    : card.suit.toLowerCase(); 
+    : 'minor'; 
     
   const imagePath = `/cards/${folder}/${card.imageFileName}`;
 
@@ -143,7 +141,8 @@ const CardComponent: React.FC<CardComponentProps> = ({ card, isRevealed, onClick
                   className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${imageLoaded ? 'opacity-100' : 'opacity-0'} ${card.isReversed ? 'rotate-180' : ''}`}
                   onLoad={() => setImageLoaded(true)}
                   onError={(e) => {
-                      console.error(`Failed to load image: ${imagePath}`);
+                      // Debugging log to see exactly what path is failing
+                      console.error(`Failed to load image at: ${imagePath}`);
                       setImageError(true);
                   }}
                 />
