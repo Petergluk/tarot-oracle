@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { DrawnCard, Suit, ArcanaType } from '../types';
 import { 
@@ -15,41 +16,61 @@ interface CardComponentProps {
   className?: string;
 }
 
-const getSuitIcon = (suit: Suit) => {
+const getSuitColor = (suit: Suit) => {
   switch (suit) {
-    case Suit.CUPS: return <Wine className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400" />;
-    case Suit.SWORDS: return <Sword className="w-4 h-4 sm:w-5 sm:h-5 text-slate-400" />;
-    case Suit.PENTACLES: return <Coins className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400" />;
-    case Suit.WANDS: return <Club className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-600" />;
-    default: return <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400" />;
+    case Suit.CUPS: return 'text-blue-500';
+    case Suit.SWORDS: return 'text-slate-600';
+    case Suit.PENTACLES: return 'text-amber-600';
+    case Suit.WANDS: return 'text-orange-600';
+    default: return 'text-purple-600';
   }
 };
 
-const getMajorArcanaIcon = (id: number) => {
+const getSuitGradient = (suit: Suit) => {
+  switch (suit) {
+    case Suit.CUPS: return 'from-blue-100 to-cyan-50 border-blue-200';
+    case Suit.SWORDS: return 'from-slate-200 to-gray-100 border-slate-300';
+    case Suit.PENTACLES: return 'from-amber-100 to-yellow-50 border-amber-200';
+    case Suit.WANDS: return 'from-orange-100 to-red-50 border-orange-200';
+    default: return 'from-indigo-100 to-purple-50 border-indigo-200'; // Major
+  }
+};
+
+const getSuitIcon = (suit: Suit, className: string = "w-6 h-6") => {
+  switch (suit) {
+    case Suit.CUPS: return <Wine className={className} />;
+    case Suit.SWORDS: return <Sword className={className} />;
+    case Suit.PENTACLES: return <Coins className={className} />;
+    case Suit.WANDS: return <Club className={className} />;
+    default: return <Sparkles className={className} />;
+  }
+};
+
+const getMajorArcanaIcon = (id: number, className: string = "w-full h-full") => {
   switch (id) {
-    case 0: return <Wind className="w-full h-full text-sky-300" />;
-    case 1: return <Sparkles className="w-full h-full text-yellow-400" />;
-    case 2: return <Scroll className="w-full h-full text-blue-300" />;
-    case 3: return <Crown className="w-full h-full text-green-400" />;
-    case 4: return <Shield className="w-full h-full text-red-500" />;
-    case 5: return <Key className="w-full h-full text-amber-600" />;
-    case 6: return <Heart className="w-full h-full text-pink-500" />;
-    case 7: return <Compass className="w-full h-full text-orange-400" />;
-    case 8: return <Flame className="w-full h-full text-red-400" />;
-    case 9: return <Search className="w-full h-full text-slate-400" />;
-    case 10: return <RefreshCw className="w-full h-full text-purple-400" />;
-    case 11: return <Scale className="w-full h-full text-indigo-400" />;
-    case 12: return <Anchor className="w-full h-full text-teal-600" />;
-    case 13: return <Skull className="w-full h-full text-slate-300" />;
-    case 14: return <Droplets className="w-full h-full text-blue-500" />;
-    case 15: return <Ghost className="w-full h-full text-red-900" />;
-    case 16: return <Zap className="w-full h-full text-yellow-500" />;
-    case 17: return <Star className="w-full h-full text-cyan-300" />;
-    case 18: return <Moon className="w-full h-full text-indigo-300" />;
-    case 19: return <Sun className="w-full h-full text-amber-500" />;
-    case 20: return <Megaphone className="w-full h-full text-orange-300" />;
-    case 21: return <Globe className="w-full h-full text-green-500" />;
-    default: return <Sparkles className="w-full h-full text-purple-400" />;
+    case 0: return <Wind className={className} />;
+    case 1: return <Sparkles className={className} />;
+    case 2: return <Scroll className={className} />;
+    case 3: return <Crown className={className} />;
+    case 4: return <Shield className={className} />;
+    case 5: return <Key className={className} />;
+    case 6: return <Heart className={className} />;
+    case 7: return <Compass className={className} />;
+    case 8: return <Flame className={className} />;
+    case 9: return <Search className={className} />;
+    case 10: return <RefreshCw className={className} />;
+    case 11: return <Scale className={className} />;
+    case 12: return <Anchor className={className} />;
+    case 13: return <Skull className={className} />;
+    case 14: return <Droplets className={className} />;
+    case 15: return <Ghost className={className} />;
+    case 16: return <Zap className={className} />;
+    case 17: return <Star className={className} />;
+    case 18: return <Moon className={className} />;
+    case 19: return <Sun className={className} />;
+    case 20: return <Megaphone className={className} />;
+    case 21: return <Globe className={className} />;
+    default: return <Sparkles className={className} />;
   }
 };
 
@@ -57,15 +78,24 @@ const CardComponent: React.FC<CardComponentProps> = ({ card, isRevealed, onClick
   const [imageError, setImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
   
-  // Reset error state when card changes
+  // Reset states when card changes
   useEffect(() => {
     setImageError(false);
     setImageLoaded(false);
   }, [card.id]);
 
-  const folder = card.arcana === ArcanaType.MAJOR ? 'major' : 'minor';
-  // Note: we assume file names in constants.ts match exact filenames in public/cards/major or public/cards/minor
+  // Determine Folder Path Logic
+  // Major Arcana -> /cards/major/
+  // Minor Arcana -> /cards/[suit]/ (e.g., /cards/wands/)
+  const folder = card.arcana === ArcanaType.MAJOR 
+    ? 'major' 
+    : card.suit.toLowerCase(); 
+    
   const imagePath = `/cards/${folder}/${card.imageFileName}`;
+
+  // Determine fallback styles (used if image fails)
+  const fallbackGradient = getSuitGradient(card.suit);
+  const fallbackTextColor = getSuitColor(card.suit);
 
   return (
     <div 
@@ -97,57 +127,68 @@ const CardComponent: React.FC<CardComponentProps> = ({ card, isRevealed, onClick
                {card.arcana === ArcanaType.MAJOR ? (
                  <span className="text-[10px] font-serif uppercase tracking-tighter">Major</span>
                ) : (
-                 getSuitIcon(card.suit)
+                 getSuitIcon(card.suit, "w-4 h-4 text-slate-700")
                )}
              </div>
            </div>
 
            {/* 2. Main Image Area */}
-           <div className="flex-1 relative bg-slate-200 overflow-hidden flex items-center justify-center">
-              {/* Image Container */}
-              {!imageError ? (
-                <div className={`relative w-full h-full transition-opacity duration-500 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}>
-                  <img 
-                    src={imagePath} 
-                    alt={card.nameRu}
-                    className={`w-full h-full object-cover transition-transform duration-700 ${card.isReversed ? 'rotate-180' : ''}`}
-                    onLoad={() => setImageLoaded(true)}
-                    onError={(e) => {
-                        console.error(`CardComponent: Failed to load image at ${imagePath}. Please check if the file exists in /public/cards/${folder}/`);
-                        setImageError(true);
-                    }}
-                  />
-                  {/* Reversed Indicator Overlay (Subtle) */}
-                  {card.isReversed && (
-                    <div className="absolute inset-0 pointer-events-none flex items-end justify-center pb-2 bg-gradient-to-t from-black/40 to-transparent">
-                       {/* Optional visual cue for reversed if needed, though rotation is enough */}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                // Fallback to Icon if Image Missing
-                <div className={`w-full h-full flex flex-col items-center justify-center p-4 bg-gradient-to-b ${
-                    card.arcana === ArcanaType.MAJOR ? 'from-purple-50 to-indigo-50' : 'from-amber-50 to-orange-50'
-                }`}>
-                  <div className={`w-16 h-16 sm:w-24 sm:h-24 mb-2 opacity-80 ${card.isReversed ? 'rotate-180' : ''}`}>
-                    {card.arcana === ArcanaType.MAJOR ? getMajorArcanaIcon(card.number) : getSuitIcon(card.suit)}
+           <div className={`flex-1 relative overflow-hidden flex items-center justify-center bg-slate-200`}>
+              
+              {/* Image Layer */}
+              {!imageError && (
+                <img 
+                  src={imagePath} 
+                  alt={card.nameRu}
+                  className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${imageLoaded ? 'opacity-100' : 'opacity-0'} ${card.isReversed ? 'rotate-180' : ''}`}
+                  onLoad={() => setImageLoaded(true)}
+                  onError={(e) => {
+                      console.error(`Failed to load image: ${imagePath}`);
+                      setImageError(true);
+                  }}
+                />
+              )}
+
+              {/* Fallback / Loading Layer (Visible if error or loading) */}
+              {(imageError || !imageLoaded) && (
+                <div className={`absolute inset-0 w-full h-full flex flex-col items-center justify-center p-4 bg-gradient-to-br ${fallbackGradient} ${card.isReversed ? 'rotate-180' : ''}`}>
+                  
+                  {/* Central Icon */}
+                  <div className={`w-20 h-20 sm:w-32 sm:h-32 mb-2 opacity-90 drop-shadow-sm ${fallbackTextColor}`}>
+                    {card.arcana === ArcanaType.MAJOR 
+                      ? getMajorArcanaIcon(card.number, "w-full h-full stroke-[1.5]") 
+                      : getSuitIcon(card.suit, "w-full h-full stroke-[1.5]")
+                    }
                   </div>
-                  <span className="text-[10px] text-slate-400 mt-2 flex items-center gap-1">
-                    <ImageOff className="w-3 h-3" /> art missing
-                  </span>
-                  <span className="text-[8px] text-red-300 max-w-full truncate px-2 mt-1">{imagePath}</span>
+                  
+                  {/* Decorative Elements for Minors to show quantity (e.g. 3 of cups) */}
+                  {card.arcana === ArcanaType.MINOR && card.number <= 10 && (
+                     <div className="absolute inset-0 opacity-5 pointer-events-none flex flex-wrap content-center justify-center gap-2 p-4">
+                        {Array.from({ length: card.number }).map((_, i) => (
+                           <div key={i} className="w-4 h-4">{getSuitIcon(card.suit, "w-full h-full")}</div>
+                        ))}
+                     </div>
+                  )}
+
+                  {card.isReversed && (
+                     <div className="absolute top-2 right-2 rotate-180">
+                        <RefreshCw className="w-4 h-4 text-red-500/50" />
+                     </div>
+                  )}
                 </div>
               )}
            </div>
 
-           {/* 3. Footer: Title & Keywords */}
-           <div className="w-full bg-[#dcd7cc] border-t-2 border-slate-300 py-2 px-1 flex flex-col items-center justify-center shrink-0 min-h-[3.5rem]">
+           {/* 3. Footer: Title */}
+           <div className="w-full bg-[#dcd7cc] border-t-2 border-slate-300 py-2 px-1 flex flex-col items-center justify-center shrink-0 min-h-[3.5rem] relative z-10">
              <div className="flex items-center gap-1">
-               {card.isReversed && <RefreshCw className="w-3 h-3 text-red-600" />}
                <h3 className="font-serif font-bold text-xs sm:text-sm text-center leading-tight uppercase tracking-wide text-slate-900">
                  {card.nameRu}
                </h3>
              </div>
+             {card.isReversed && (
+               <span className="text-[8px] uppercase tracking-widest text-red-700/60 mt-0.5">Перевернутая</span>
+             )}
            </div>
 
         </div>

@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { DrawnCard, Spread } from "../types";
 
@@ -98,9 +97,15 @@ async function executeWithRetry<T>(
       lastError = error;
       console.warn(`Attempt failed with key index ${currentKeyIndex}:`, error);
 
+      // CRITICAL CHECK: If the error contains HTML, it means the Proxy failed (404/500 from server)
+      // and returned the index.html fallback instead of JSON. 
+      // Rotating keys won't fix a broken proxy configuration.
+      if (error.message && error.message.includes('<!DOCTYPE html>')) {
+         throw new Error("Ошибка соединения с прокси-сервером (Proxy Error). Проверьте логи сервера.");
+      }
+
       // Check for specific errors that warrant a key switch
       // 429: Too Many Requests (Quota)
-      // 400: Bad Request (Invalid Key sometimes)
       // 403: Forbidden (Key valid but permission denied)
       // 503: Service Unavailable
       const isRetryable = 

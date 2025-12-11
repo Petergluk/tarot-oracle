@@ -1,15 +1,15 @@
 import { ArcanaType, Spread, Suit, TarotCard } from './types';
 
-// Map logical IDs to specific filenames provided by user
-// Corrections made based on loading errors: trying alternative naming conventions for failed cards
+// Полная карта соответствия ID карт к именам файлов
+// Основана на предоставленном списке файлов пользователя
 const IMAGE_MAP: Record<string, string> = {
-  // Major Arcana
+  // --- MAJOR ARCANA (0-21) ---
   'major_0': '01_the_fool.jpg',
   'major_1': '02_the_magician.jpg',
   'major_2': '03_the_high_priestess.jpg',
   'major_3': '04_the_empress.jpg',
   'major_4': '05_the_emperor.jpg',
-  'major_5': '06_the_hierophant.jpg', 
+  'major_5': '06_the_hierophant.jpg',
   'major_6': '07_the_lovers.jpg',
   'major_7': '08_the_chariot.jpg',
   'major_8': '09_strength.jpg',
@@ -27,15 +27,15 @@ const IMAGE_MAP: Record<string, string> = {
   'major_20': '21_judgement.jpg',
   'major_21': '22_the_world.jpg',
 
-  // Wands
+  // --- WANDS (01-14) ---
   'ace_of_wands': '01_ace_of_wands.jpg',
   'two_of_wands': '02_two_of_wands.jpg',
-  'three_of_wands': '03_wands_three.jpg', // Swapped based on failure
+  'three_of_wands': '03_three_of_wands.jpg',
   'four_of_wands': '04_four_of_wands.jpg',
   'five_of_wands': '05_five_of_wands.jpg',
   'six_of_wands': '06_six_of_wands.jpg',
   'seven_of_wands': '07_seven_of_wands.jpg',
-  'eight_of_wands': '08_wands_eight.jpg', // Swapped naming convention
+  'eight_of_wands': '08_eight_of_wands.jpg',
   'nine_of_wands': '09_nine_of_wands.jpg',
   'ten_of_wands': '10_ten_of_wands.jpg',
   'page_of_wands': '11_page_of_wands.jpg',
@@ -43,8 +43,8 @@ const IMAGE_MAP: Record<string, string> = {
   'queen_of_wands': '13_queen_of_wands.jpg',
   'king_of_wands': '14_king_of_wands.jpg',
 
-  // Cups
-  'ace_of_cups': '15_cups_ace.jpg', // Swapped based on failure
+  // --- CUPS (15-28) ---
+  'ace_of_cups': '15_ace_of_cups.jpg',
   'two_of_cups': '16_two_of_cups.jpg',
   'three_of_cups': '17_three_of_cups.jpg',
   'four_of_cups': '18_four_of_cups.jpg',
@@ -59,37 +59,37 @@ const IMAGE_MAP: Record<string, string> = {
   'queen_of_cups': '27_queen_of_cups.jpg',
   'king_of_cups': '28_king_of_cups.jpg',
 
-  // Swords
-  'ace_of_swords': '29_swords_ace.jpg', // Swapped
-  'two_of_swords': '30_swords_two.jpg',
-  'three_of_swords': '31_swords_three.jpg', // Removed _png suffix and swapped
-  'four_of_swords': '32_swords_four.jpg',
-  'five_of_swords': '33_swords_five.jpg',
-  'six_of_swords': '34_swords_six.jpg',
-  'seven_of_swords': '35_swords_seven.jpg', // Swapped
+  // --- SWORDS (29-42) - Mixed naming convention ---
+  'ace_of_swords': '29_ace_of_swords.jpg',
+  'two_of_swords': '30_swords_two.jpg',         // Irregular
+  'three_of_swords': '31_swords_three_png.jpg', // Irregular with suffix
+  'four_of_swords': '32_swords_four.jpg',       // Irregular
+  'five_of_swords': '33_swords_five.jpg',       // Irregular
+  'six_of_swords': '34_swords_six.jpg',         // Irregular
+  'seven_of_swords': '35_seven_of_swords.jpg',  // Back to standard?
   'eight_of_swords': '36_eight_of_swords.jpg',
-  'nine_of_swords': '37_swords_nine.jpg', // Swapped based on failure
-  'ten_of_swords': '38_swords_ten.jpg',
-  'page_of_swords': '39_swords_page.jpg', // Swapped
-  'knight_of_swords': '40_swords_knight.jpg',
-  'queen_of_swords': '41_swords_queen.jpg',
-  'king_of_swords': '42_king_of_swords.jpg', // Swapped
+  'nine_of_swords': '37_nine_of_swords.jpg',
+  'ten_of_swords': '38_swords_ten.jpg',         // Irregular
+  'page_of_swords': '39_page_of_swords.jpg',
+  'knight_of_swords': '40_swords_knight.jpg',   // Irregular
+  'queen_of_swords': '41_swords_queen.jpg',     // Irregular
+  'king_of_swords': '42_swords_king.jpg',       // Irregular
 
-  // Pentacles
+  // --- PENTACLES (43-56) - Mixed naming convention ---
   'ace_of_pentacles': '43_ace_of_pentacles.jpg',
-  'two_of_pentacles': '44_pentacles_two.jpg',
-  'three_of_pentacles': '45_pentacles_three.jpg', // Swapped based on failure
-  'four_of_pentacles': '46_pentacles_four.jpg',
-  'five_of_pentacles': '47_pentacles_five.jpg',
+  'two_of_pentacles': '44_pentacles_two.jpg',     // Irregular
+  'three_of_pentacles': '45_three_of_pentacles.jpg',
+  'four_of_pentacles': '46_pentacles_four.jpg',   // Irregular
+  'five_of_pentacles': '47_pentacles_five.jpg',   // Irregular
   'six_of_pentacles': '48_six_of_pentacles.jpg',
-  'seven_of_pentacles': '49_pentacles_seven.jpg',
+  'seven_of_pentacles': '49_pentacles_seven.jpg', // Irregular
   'eight_of_pentacles': '50_eight_of_pentacles.jpg',
   'nine_of_pentacles': '51_nine_of_pentacles.jpg',
-  'ten_of_pentacles': '52_pentacles_ten.jpg',
-  'page_of_pentacles': '53_page_of_pentacles.jpg', // Swapped
-  'knight_of_pentacles': '54_knight_of_pentacles.jpg', // Swapped
-  'queen_of_pentacles': '55_queen_of_pentacles.jpg', // Swapped
-  'king_of_pentacles': '56_pentacles_king.jpg'
+  'ten_of_pentacles': '52_pentacles_ten.jpg',     // Irregular
+  'page_of_pentacles': '53_pentacles_page.jpg',   // Irregular
+  'knight_of_pentacles': '54_pentacles_knight.jpg',// Irregular
+  'queen_of_pentacles': '55_pentacles_queen.jpg',  // Irregular
+  'king_of_pentacles': '56_pentacles_king.jpg'     // Irregular
 };
 
 // Helper to generate Minor Arcana
@@ -114,6 +114,10 @@ const generateMinorArcana = (suit: Suit, suitRu: string): TarotCard[] => {
 
   ranks.forEach((rank) => {
     const id = `${rank.name.toLowerCase()}_of_${suit.toLowerCase()}`;
+    
+    // Explicitly use the map.
+    const fileName = IMAGE_MAP[id] || `${id}.jpg`;
+
     cards.push({
       id: id,
       name: `${rank.name} of ${suit}`,
@@ -122,7 +126,7 @@ const generateMinorArcana = (suit: Suit, suitRu: string): TarotCard[] => {
       suit: suit,
       arcana: ArcanaType.MINOR,
       description: `Энергия масти ${suitRu}, проявленная через ${rank.nameRu}`,
-      imageFileName: IMAGE_MAP[id] || `${id}.jpg`
+      imageFileName: fileName
     });
   });
   return cards;
@@ -156,6 +160,8 @@ const majorArcanaData = [
 
 const majorArcanaCards: TarotCard[] = majorArcanaData.map((c) => {
   const id = `major_${c.id}`;
+  const fileName = IMAGE_MAP[id] || `${id}.jpg`;
+  
   return {
     id: id,
     name: c.name,
@@ -164,7 +170,7 @@ const majorArcanaCards: TarotCard[] = majorArcanaData.map((c) => {
     suit: Suit.NONE,
     arcana: ArcanaType.MAJOR,
     description: c.desc,
-    imageFileName: IMAGE_MAP[id] || `${id}.jpg`
+    imageFileName: fileName
   };
 });
 
