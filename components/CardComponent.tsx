@@ -4,8 +4,7 @@ import {
   Sparkles, Moon, Sun, Sword, Wine, Coins, Club, 
   Wind, Scroll, Crown, Shield, Key, Heart, Compass, 
   Flame, Search, RefreshCw, Scale, Anchor, Skull, 
-  Droplets, Ghost, Zap, Star, Megaphone, Globe,
-  ImageOff
+  Droplets, Ghost, Zap, Star, Megaphone, Globe
 } from 'lucide-react';
 
 interface CardComponentProps {
@@ -83,8 +82,8 @@ const CardComponent: React.FC<CardComponentProps> = ({ card, isRevealed, onClick
     setImageLoaded(false);
   }, [card.id]);
 
-  // Determine Folder Path Logic
-  // User confirmed structure: /major/ and /minor/
+  // Folder Logic: STRICTLY 'major' or 'minor' based on user file structure
+  // Do NOT use suit names for folders.
   const folder = card.arcana === ArcanaType.MAJOR 
     ? 'major' 
     : 'minor'; 
@@ -141,8 +140,7 @@ const CardComponent: React.FC<CardComponentProps> = ({ card, isRevealed, onClick
                   className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${imageLoaded ? 'opacity-100' : 'opacity-0'} ${card.isReversed ? 'rotate-180' : ''}`}
                   onLoad={() => setImageLoaded(true)}
                   onError={(e) => {
-                      // Debugging log to see exactly what path is failing
-                      console.error(`Failed to load image at: ${imagePath}`);
+                      console.error(`Failed to load image: ${imagePath}`);
                       setImageError(true);
                   }}
                 />

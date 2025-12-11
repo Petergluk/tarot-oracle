@@ -62,7 +62,7 @@ const IMAGE_MAP: Record<string, string> = {
   // --- SWORDS (29-42) - Mixed naming convention ---
   'ace_of_swords': '29_ace_of_swords.jpg',
   'two_of_swords': '30_swords_two.jpg',         // Irregular
-  'three_of_swords': '31_swords_three_png.jpg', // Irregular with suffix
+  'three_of_swords': '31_swords_three.jpg',     // Fixed from '31_swords_three_png.jpg'
   'four_of_swords': '32_swords_four.jpg',       // Irregular
   'five_of_swords': '33_swords_five.jpg',       // Irregular
   'six_of_swords': '34_swords_six.jpg',         // Irregular
