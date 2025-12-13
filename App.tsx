@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { Loader2, Sparkles, Send, RefreshCw, ChevronRight, BrainCircuit, Eye, ChevronDown, Settings, X, Save, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
+import { Loader2, Sparkles, Send, RefreshCw, ChevronRight, BrainCircuit, Eye, ChevronDown, Settings, X, Save, AlertTriangle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
 // Internal imports
@@ -85,75 +86,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ config, onConfigChange, o
             <Save className="w-4 h-4" /> Сохранить
           </button>
         </div>
-      </div>
-    </div>
-  );
-};
-
-// --- DIAGNOSTIC PANEL FOR IMAGE PATHS ---
-const DebugPanel: React.FC = () => {
-  const [results, setResults] = useState<Record<string, boolean | null>>({});
-  const [isVisible, setIsVisible] = useState(false);
-
-  const testPaths = [
-    '/cards/major/01_the_fool.jpg',
-    '/cards/minor/01_ace_of_wands.jpg',
-    '/public/cards/major/01_the_fool.jpg', // Test incorrect path
-    '/cards/wands/01_ace_of_wands.jpg' // Test old incorrect logic
-  ];
-
-  const checkPaths = async () => {
-    const newResults: Record<string, boolean> = {};
-    for (const path of testPaths) {
-      try {
-        const res = await fetch(path, { method: 'HEAD' });
-        newResults[path] = res.ok;
-      } catch (e) {
-        newResults[path] = false;
-      }
-    }
-    setResults(newResults);
-  };
-
-  useEffect(() => {
-    checkPaths();
-  }, []);
-
-  if (!isVisible) {
-    return (
-      <div className="fixed bottom-2 right-2 z-[9999] opacity-50 hover:opacity-100 transition-opacity">
-        <button 
-          onClick={() => setIsVisible(true)}
-          className="bg-slate-800 text-xs text-slate-400 p-1 rounded border border-slate-700"
-        >
-          Debug
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="fixed bottom-0 right-0 z-[9999] bg-slate-900 border-t border-l border-slate-700 p-4 w-full sm:w-96 shadow-2xl text-xs font-mono max-h-60 overflow-y-auto">
-      <div className="flex justify-between items-center mb-2 border-b border-slate-700 pb-2">
-        <h3 className="text-amber-500 font-bold">Image Path Diagnostic</h3>
-        <button onClick={() => setIsVisible(false)}><X className="w-4 h-4 text-slate-500" /></button>
-      </div>
-      <div className="space-y-2">
-        {testPaths.map(path => (
-          <div key={path} className="flex items-center gap-2">
-            {results[path] === true ? (
-              <CheckCircle className="w-3 h-3 text-green-500 shrink-0" />
-            ) : results[path] === false ? (
-              <XCircle className="w-3 h-3 text-red-500 shrink-0" />
-            ) : (
-              <Loader2 className="w-3 h-3 text-yellow-500 animate-spin shrink-0" />
-            )}
-            <span className={results[path] ? 'text-green-200' : 'text-red-300'}>{path}</span>
-          </div>
-        ))}
-      </div>
-      <div className="mt-2 pt-2 border-t border-slate-800 text-[10px] text-slate-500">
-        Green check means the file exists on server. Red cross means 404/Error.
       </div>
     </div>
   );
@@ -567,7 +499,6 @@ const App: React.FC = () => {
         )}
 
       </div>
-      <DebugPanel />
     </div>
   );
 

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { DrawnCard, Suit, ArcanaType } from '../types';
 import { 
@@ -74,23 +75,17 @@ const getMajorArcanaIcon = (id: number, className: string = "w-full h-full") => 
 
 const CardComponent: React.FC<CardComponentProps> = ({ card, isRevealed, onClick, className = '' }) => {
   const [imageError, setImageError] = useState(false);
-  const [imageLoaded, setImageLoaded] = useState(false);
   
-  // Reset states when card changes
+  // Reset state when card changes
   useEffect(() => {
     setImageError(false);
-    setImageLoaded(false);
   }, [card.id]);
 
-  // Folder Logic: STRICTLY 'major' or 'minor' based on user file structure
-  // Do NOT use suit names for folders.
-  const folder = card.arcana === ArcanaType.MAJOR 
-    ? 'major' 
-    : 'minor'; 
-    
+  // Folder Logic: STRICTLY 'major' or 'minor'
+  const folder = card.arcana === ArcanaType.MAJOR ? 'major' : 'minor'; 
   const imagePath = `/cards/${folder}/${card.imageFileName}`;
 
-  // Determine fallback styles (used if image fails)
+  // Determine fallback styles
   const fallbackGradient = getSuitGradient(card.suit);
   const fallbackTextColor = getSuitColor(card.suit);
 
@@ -137,19 +132,23 @@ const CardComponent: React.FC<CardComponentProps> = ({ card, isRevealed, onClick
                 <img 
                   src={imagePath} 
                   alt={card.nameRu}
-                  className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${imageLoaded ? 'opacity-100' : 'opacity-0'} ${card.isReversed ? 'rotate-180' : ''}`}
-                  onLoad={() => setImageLoaded(true)}
+                  className={`absolute inset-0 w-full h-full object-cover ${card.isReversed ? 'rotate-180' : ''}`}
                   onError={(e) => {
-                      console.error(`Failed to load image: ${imagePath}`);
+                      console.error(`FAILED TO LOAD: ${imagePath}`);
                       setImageError(true);
                   }}
                 />
               )}
 
-              {/* Fallback / Loading Layer (Visible if error or loading) */}
-              {(imageError || !imageLoaded) && (
+              {/* Fallback / Loading Layer (Visible if error) */}
+              {imageError && (
                 <div className={`absolute inset-0 w-full h-full flex flex-col items-center justify-center p-4 bg-gradient-to-br ${fallbackGradient} ${card.isReversed ? 'rotate-180' : ''}`}>
                   
+                  {/* DEBUG INFO: Path that failed */}
+                  <div className="absolute top-0 left-0 w-full bg-red-500/80 text-white text-[8px] p-1 break-all z-50">
+                    {imagePath}
+                  </div>
+
                   {/* Central Icon */}
                   <div className={`w-20 h-20 sm:w-32 sm:h-32 mb-2 opacity-90 drop-shadow-sm ${fallbackTextColor}`}>
                     {card.arcana === ArcanaType.MAJOR 
@@ -158,7 +157,7 @@ const CardComponent: React.FC<CardComponentProps> = ({ card, isRevealed, onClick
                     }
                   </div>
                   
-                  {/* Decorative Elements for Minors to show quantity (e.g. 3 of cups) */}
+                  {/* Decorative Elements for Minors */}
                   {card.arcana === ArcanaType.MINOR && card.number <= 10 && (
                      <div className="absolute inset-0 opacity-5 pointer-events-none flex flex-wrap content-center justify-center gap-2 p-4">
                         {Array.from({ length: card.number }).map((_, i) => (
