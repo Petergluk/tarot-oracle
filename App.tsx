@@ -1,4 +1,6 @@
 
+ // App.tsx
+ // v3.1.0 @ 2025-05-21
 import React, { useState, useEffect, useRef } from 'react';
 import { Loader2, Sparkles, Send, RefreshCw, ChevronRight, BrainCircuit, Eye, ChevronDown, Settings, X, Save, AlertTriangle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -43,10 +45,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ config, onConfigChange, o
               onChange={(e) => onConfigChange({...config, model: e.target.value})}
               className="w-full bg-slate-950 border border-slate-700 text-slate-200 p-2 text-sm rounded focus:border-amber-500 outline-none"
             >
-              <option value="gemini-2.5-flash">Gemini 2.5 Flash (Default)</option>
-              <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite</option>
-              <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-              <option value="gemini-3-pro-preview">Gemini 3 Pro Preview</option>
+              <option value="gemini-3-flash-preview">Gemini 3 Flash (Default)</option>
+              <option value="gemini-flash-lite-latest">Gemini Flash Lite</option>
+              <option value="gemini-3-pro-preview">Gemini 3 Pro</option>
             </select>
           </div>
 
@@ -112,7 +113,7 @@ const App: React.FC = () => {
   const [aiConfig, setAiConfig] = useState<AIConfig>({
     temperature: 1.1,
     systemPrompt: DEFAULT_SYSTEM_PROMPT,
-    model: 'gemini-2.5-flash'
+    model: 'gemini-3-flash-preview'
   });
 
   // Helper: Shuffle and Draw

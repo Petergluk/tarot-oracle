@@ -1,53 +1,15 @@
+
+ // services/geminiService.ts
+ // v3.1.0 @ 2025-05-21
+ /**
+  * @description Сервис для взаимодействия с Google Gemini API.
+  * @changelog
+  * 1. Исправлена инициализация GoogleGenAI (удален baseUrl).
+  * 2. Переход на эксклюзивное использование process.env.API_KEY.
+  * 3. Обновлены модели на gemini-3-flash-preview.
+  */
 import { GoogleGenAI, Type } from "@google/genai";
 import { DrawnCard, Spread } from "../types";
-
-// --- API KEY MANAGEMENT ---
-
-// Helper to get keys from environment with fallback strategies
-const getApiKeys = (): string[] => {
-  // Strategy 1: Check standard process.env.API_KEY (Node/Webpack/Custom define)
-  let envKey = process.env.API_KEY;
-
-  // Strategy 2: Check process.env.VITE_API_KEYS (Vite build time replacement)
-  if (!envKey && typeof process !== 'undefined' && process.env) {
-     envKey = process.env.VITE_API_KEYS;
-  }
-
-  // Strategy 3: Check import.meta.env.VITE_API_KEYS (Vite standard)
-  // We cast to any to avoid TS errors if "types": ["vite/client"] is not strictly set
-  if (!envKey) {
-    try {
-      const metaEnv = (import.meta as any).env;
-      if (metaEnv) {
-        envKey = metaEnv.VITE_API_KEYS || metaEnv.API_KEY;
-      }
-    } catch (e) {
-      // Ignore if import.meta is not available
-    }
-  }
-
-  if (envKey) {
-    // Support comma-separated keys for rotation logic
-    return envKey.split(',').map((k: string) => k.trim()).filter((k: string) => k.length > 0);
-  }
-
-  return [];
-};
-
-const apiKeys = getApiKeys();
-let currentKeyIndex = 0;
-
-// Helper to get a client with the current or specific key
-const getClient = (index: number = currentKeyIndex) => {
-  if (apiKeys.length === 0) return null;
-  // Wrap index around if it exceeds length
-  const safeIndex = index % apiKeys.length;
-  const key = apiKeys[safeIndex];
-  
-  // Use relative URL for proxying through our own server to hide IP and bypass regional blocks.
-  // The server (server.js) forwards '/google-api' -> 'https://generativelanguage.googleapis.com'
-  return new GoogleGenAI({ apiKey: key, baseUrl: '/google-api' });
-};
 
 // --- CONFIGURATION ---
 
@@ -68,81 +30,19 @@ export const DEFAULT_SYSTEM_PROMPT = `Ты великий мудрец и ора
 И чтобы не терять выпавших нам возможностей в этом волшебном круговороте, в кружении великого танца перемен, где принимать участие приходится не потому что ты этого хочешь или не хочешь, просто ты уже есть и принимаешь в этом участие, — Танцуй и играй.
 Таков непреложный и главный закон устройства сознания моего мира.`;
 
-// --- GENERIC EXECUTION WITH ROTATION ---
-
-/**
- * Executes an AI call with automatic key rotation on failure.
- */
-async function executeWithRetry<T>(
-  operation: (ai: GoogleGenAI) => Promise<T>
-): Promise<T> {
-  if (apiKeys.length === 0) {
-    throw new Error("API Keys are missing. Please check your configuration (VITE_API_KEYS or API_KEY).");
-  }
-
-  let attempts = 0;
-  const maxAttempts = apiKeys.length;
-
-  // Capture the error to throw if all attempts fail
-  let lastError: any = null;
-
-  while (attempts < maxAttempts) {
-    try {
-      const ai = getClient(currentKeyIndex);
-      if (!ai) throw new Error("Failed to initialize AI client");
-      
-      return await operation(ai);
-
-    } catch (error: any) {
-      lastError = error;
-      console.warn(`Attempt failed with key index ${currentKeyIndex}:`, error);
-
-      // CRITICAL CHECK: If the error contains HTML, it means the Proxy failed (404/500 from server)
-      // and returned the index.html fallback instead of JSON. 
-      // Rotating keys won't fix a broken proxy configuration.
-      if (error.message && error.message.includes('<!DOCTYPE html>')) {
-         throw new Error("Ошибка соединения с прокси-сервером (Proxy Error). Проверьте логи сервера.");
-      }
-
-      // Check for specific errors that warrant a key switch
-      // 429: Too Many Requests (Quota)
-      // 403: Forbidden (Key valid but permission denied)
-      // 503: Service Unavailable
-      const isRetryable = 
-        error.status === 429 || 
-        error.status === 403 || 
-        error.status === 503 ||
-        (error.message && (
-          error.message.includes('fetch failed') || 
-          error.message.includes('quota') || 
-          error.message.includes('API key')
-        ));
-
-      if (isRetryable) {
-        attempts++;
-        // Rotate key index
-        currentKeyIndex = (currentKeyIndex + 1) % apiKeys.length;
-        console.log(`Switching to API Key index: ${currentKeyIndex}`);
-      } else {
-        // Fatal error (e.g., invalid prompt format), do not retry
-        throw error;
-      }
-    }
-  }
-
-  throw lastError || new Error("All API keys failed. Please check your quota or billing.");
-}
-
 // --- PUBLIC METHODS ---
 
 /**
- * Analyzes the user's question and selects the most appropriate Tarot spread.
+ * Анализирует вопрос пользователя и выбирает наиболее подходящий расклад Таро.
  */
 export const selectBestSpread = async (
   question: string, 
   availableSpreads: Spread[],
   config?: AIConfig
 ): Promise<string> => {
+  // Always create a new instance right before use to ensure the latest API key is used
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  
   const spreadOptions = availableSpreads.map(s => ({
     id: s.id,
     name: s.name,
@@ -167,25 +67,30 @@ export const selectBestSpread = async (
   `;
 
   try {
-    return await executeWithRetry(async (ai) => {
-      const response = await ai.models.generateContent({
-        model: config?.model || "gemini-2.5-flash",
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              spreadId: { type: Type.STRING },
-              reasoning: { type: Type.STRING, description: "Short explanation why this spread was chosen" }
+    const response = await ai.models.generateContent({
+      model: config?.model || "gemini-3-flash-preview",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            spreadId: { 
+              type: Type.STRING,
+              description: "The ID of the chosen spread"
+            },
+            reasoning: { 
+              type: Type.STRING, 
+              description: "Short explanation why this spread was chosen" 
             }
-          }
+          },
+          required: ["spreadId"]
         }
-      });
-      
-      const result = JSON.parse(response.text || "{}");
-      return result.spreadId || "three_card_classic";
+      }
     });
+    
+    const result = JSON.parse(response.text || "{}");
+    return result.spreadId || "three_card_classic";
   } catch (e) {
     console.warn("AI Spread Selection failed, defaulting to 3-card.", e);
     return "three_card_classic";
@@ -193,7 +98,7 @@ export const selectBestSpread = async (
 };
 
 /**
- * Generates the interpretation of the drawn cards.
+ * Генерирует интерпретацию вытянутых карт.
  */
 export const getTarotReading = async (
   question: string,
@@ -201,6 +106,9 @@ export const getTarotReading = async (
   cards: DrawnCard[],
   config?: AIConfig
 ): Promise<string> => {
+  // Always create a new instance right before use to ensure the latest API key is used
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
   let cardDescription = "";
   cards.forEach((card, idx) => {
     const position = spread.positions[idx];
@@ -229,20 +137,16 @@ export const getTarotReading = async (
     Язык: Русский.
   `;
 
-  // Combine system prompt (custom or default) with the context
   const systemInstruction = config?.systemPrompt || DEFAULT_SYSTEM_PROMPT;
 
-  // We remove the try/catch block here to let the error propagate to the UI
-  return await executeWithRetry(async (ai) => {
-    const response = await ai.models.generateContent({
-      model: config?.model || "gemini-2.5-flash",
-      contents: prompt,
-      config: {
-        temperature: config?.temperature ?? 1.1, 
-        systemInstruction: systemInstruction
-      }
-    });
-
-    return response.text || "Туман скрывает будущее... Попробуйте еще раз.";
+  const response = await ai.models.generateContent({
+    model: config?.model || "gemini-3-flash-preview",
+    contents: prompt,
+    config: {
+      temperature: config?.temperature ?? 1.1, 
+      systemInstruction: systemInstruction
+    }
   });
+
+  return response.text || "Туман скрывает будущее... Попробуйте еще раз.";
 };
