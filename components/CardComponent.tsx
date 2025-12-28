@@ -1,11 +1,10 @@
 // components/CardComponent.tsx
-// v3.0.0 @ 2025-05-20
+// v3.1.0 @ 2025-05-21
 /**
- * @description Рефакторинг компонента карты для гарантированного отображения статических ассетов.
+ * @description Компонент карты Таро с чистым фолбэком без технических сообщений об ошибках.
  * @changelog 
- * 1. Упрощена логика z-index для картинки.
- * 2. Убрана блокировка тега img состоянием ошибки.
- * 3. Добавлен визуальный отладчик пути прямо на лицевой стороне при сбое.
+ * 1. Удалены красные баннеры с путями ошибок.
+ * 2. Улучшена логика наслоения: картинка плавно перекрывает фон при загрузке.
  */
 import React, { useState, useEffect } from 'react';
 import { DrawnCard, Suit, ArcanaType } from '../types';
@@ -82,9 +81,11 @@ const getMajorArcanaIcon = (id: number, className: string = "w-full h-full") => 
 };
 
 const CardComponent: React.FC<CardComponentProps> = ({ card, isRevealed, onClick, className = '' }) => {
+  const [isImageLoaded, setIsImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
   
   useEffect(() => {
+    setIsImageLoaded(false);
     setImageError(false);
   }, [card.id, card.imageFileName]);
 
@@ -128,32 +129,29 @@ const CardComponent: React.FC<CardComponentProps> = ({ card, isRevealed, onClick
              </div>
            </div>
 
-           {/* Main Area */}
+           {/* Main Content Area */}
            <div className="flex-1 relative overflow-hidden flex items-center justify-center bg-slate-200">
               
-              {/* Fallback Layer (UNDER the image) */}
+              {/* Layer 1: Aesthetic Fallback (Gradient + Minimalist Icon) */}
               <div className={`absolute inset-0 flex flex-col items-center justify-center p-4 bg-gradient-to-br ${fallbackGradient} ${card.isReversed ? 'rotate-180' : ''} z-10`}>
-                <div className={`w-20 h-20 sm:w-32 sm:h-32 mb-2 opacity-40 drop-shadow-sm ${fallbackTextColor}`}>
+                <div className={`w-20 h-20 sm:w-32 sm:h-32 opacity-20 drop-shadow-sm ${fallbackTextColor}`}>
                   {card.arcana === ArcanaType.MAJOR 
-                    ? getMajorArcanaIcon(card.number, "w-full h-full stroke-[1.5]") 
-                    : getSuitIcon(card.suit, "w-full h-full stroke-[1.5]")
+                    ? getMajorArcanaIcon(card.number, "w-full h-full stroke-[1.2]") 
+                    : getSuitIcon(card.suit, "w-full h-full stroke-[1.2]")
                   }
                 </div>
-                {/* Debug path if error happens */}
-                {imageError && (
-                    <div className="absolute top-0 left-0 w-full bg-red-600/90 text-white text-[9px] p-1 font-mono break-all text-center">
-                        Error: {imagePath}
-                    </div>
-                )}
               </div>
 
-              {/* IMAGE LAYER (TOP) */}
-              <img 
-                src={imagePath} 
-                alt={card.nameRu}
-                className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${imageError ? 'opacity-0' : 'opacity-100'} ${card.isReversed ? 'rotate-180' : ''} z-20`}
-                onError={() => setImageError(true)}
-              />
+              {/* Layer 2: The Real Image */}
+              {!imageError && (
+                <img 
+                  src={imagePath} 
+                  alt={card.nameRu}
+                  onLoad={() => setIsImageLoaded(true)}
+                  onError={() => setImageError(true)}
+                  className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${isImageLoaded ? 'opacity-100' : 'opacity-0'} ${card.isReversed ? 'rotate-180' : ''} z-20`}
+                />
+              )}
            </div>
 
            {/* Footer */}
