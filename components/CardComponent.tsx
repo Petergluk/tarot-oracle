@@ -1,11 +1,6 @@
-// components/CardComponent.tsx
-// v3.1.0 @ 2025-05-21
-/**
- * @description Компонент карты Таро с чистым фолбэком без технических сообщений об ошибках.
- * @changelog 
- * 1. Удалены красные баннеры с путями ошибок.
- * 2. Улучшена логика наслоения: картинка плавно перекрывает фон при загрузке.
- */
+
+ // components/CardComponent.tsx
+ // v3.2.0 @ 2025-05-21
 import React, { useState, useEffect } from 'react';
 import { DrawnCard, Suit, ArcanaType } from '../types';
 import { 
@@ -34,11 +29,11 @@ const getSuitColor = (suit: Suit) => {
 
 const getSuitGradient = (suit: Suit) => {
   switch (suit) {
-    case Suit.CUPS: return 'from-blue-100 to-cyan-50 border-blue-200';
-    case Suit.SWORDS: return 'from-slate-200 to-gray-100 border-slate-300';
-    case Suit.PENTACLES: return 'from-amber-100 to-yellow-50 border-amber-200';
-    case Suit.WANDS: return 'from-orange-100 to-red-50 border-orange-200';
-    default: return 'from-indigo-100 to-purple-50 border-indigo-200'; 
+    case Suit.CUPS: return 'from-blue-100 to-cyan-50';
+    case Suit.SWORDS: return 'from-slate-200 to-gray-100';
+    case Suit.PENTACLES: return 'from-amber-100 to-yellow-50';
+    case Suit.WANDS: return 'from-orange-100 to-red-50';
+    default: return 'from-indigo-100 to-purple-50'; 
   }
 };
 
@@ -53,31 +48,9 @@ const getSuitIcon = (suit: Suit, className: string = "w-6 h-6") => {
 };
 
 const getMajorArcanaIcon = (id: number, className: string = "w-full h-full") => {
-  switch (id) {
-    case 0: return <Wind className={className} />;
-    case 1: return <Sparkles className={className} />;
-    case 2: return <Scroll className={className} />;
-    case 3: return <Crown className={className} />;
-    case 4: return <Shield className={className} />;
-    case 5: return <Key className={className} />;
-    case 6: return <Heart className={className} />;
-    case 7: return <Compass className={className} />;
-    case 8: return <Flame className={className} />;
-    case 9: return <Search className={className} />;
-    case 10: return <RefreshCw className={className} />;
-    case 11: return <Scale className={className} />;
-    case 12: return <Anchor className={className} />;
-    case 13: return <Skull className={className} />;
-    case 14: return <Droplets className={className} />;
-    case 15: return <Ghost className={className} />;
-    case 16: return <Zap className={className} />;
-    case 17: return <Star className={className} />;
-    case 18: return <Moon className={className} />;
-    case 19: return <Sun className={className} />;
-    case 20: return <Megaphone className={className} />;
-    case 21: return <Globe className={className} />;
-    default: return <Sparkles className={className} />;
-  }
+  const icons = [Wind, Sparkles, Scroll, Crown, Shield, Key, Heart, Compass, Flame, Search, RefreshCw, Scale, Anchor, Skull, Droplets, Ghost, Zap, Star, Moon, Sun, Megaphone, Globe];
+  const Icon = icons[id] || Sparkles;
+  return <Icon className={className} />;
 };
 
 const CardComponent: React.FC<CardComponentProps> = ({ card, isRevealed, onClick, className = '' }) => {
@@ -87,13 +60,10 @@ const CardComponent: React.FC<CardComponentProps> = ({ card, isRevealed, onClick
   useEffect(() => {
     setIsImageLoaded(false);
     setImageError(false);
-  }, [card.id, card.imageFileName]);
+  }, [card.id]);
 
   const folder = card.arcana === ArcanaType.MAJOR ? 'major' : 'minor'; 
   const imagePath = `/cards/${folder}/${card.imageFileName}`;
-
-  const fallbackGradient = getSuitGradient(card.suit);
-  const fallbackTextColor = getSuitColor(card.suit);
 
   return (
     <div 
@@ -102,87 +72,47 @@ const CardComponent: React.FC<CardComponentProps> = ({ card, isRevealed, onClick
     >
       <div className={`relative w-full h-full duration-700 transition-transform transform-style-3d ${isRevealed ? 'rotate-y-180' : ''}`}>
         
-        {/* --- CARD BACK --- */}
-        <div className="absolute inset-0 backface-hidden rounded-lg border border-slate-800 bg-slate-950 shadow-2xl flex items-center justify-center overflow-hidden">
-           <div className="absolute inset-0 opacity-30 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-indigo-900/50 via-slate-950 to-black"></div>
-           <div className="absolute inset-2 border border-amber-900/30 rounded-md flex items-center justify-center">
-              <div className="w-16 h-16 sm:w-24 sm:h-24 rounded-full border border-amber-600/20 flex items-center justify-center animate-pulse">
-                <Moon className="w-8 h-8 sm:w-12 sm:h-12 text-amber-700/50" />
-              </div>
-           </div>
+        {/* BACK */}
+        <div className="absolute inset-0 backface-hidden rounded-lg border border-slate-800 bg-slate-950 shadow-2xl flex items-center justify-center overflow-hidden z-10">
+           <div className="absolute inset-0 opacity-30 bg-indigo-900/50"></div>
+           <Moon className="w-12 h-12 text-amber-700/50 animate-pulse" />
         </div>
 
-        {/* --- CARD FRONT --- */}
-        <div className="absolute inset-0 backface-hidden rotate-y-180 rounded-lg bg-[#e8e4d9] border-4 border-slate-800 shadow-2xl overflow-hidden flex flex-col text-slate-900">
-           
-           {/* Header */}
-           <div className="w-full px-2 py-1 flex justify-between items-center border-b border-slate-300 bg-[#dcd7cc] h-8 shrink-0 z-30">
-             <span className="text-xs sm:text-sm font-bold font-serif text-slate-700">
-               {card.arcana === ArcanaType.MAJOR ? (card.number === 0 ? '0' : romanize(card.number)) : card.number}
-             </span>
-             <div className="opacity-80">
-               {card.arcana === ArcanaType.MAJOR ? (
-                 <span className="text-[10px] font-serif uppercase tracking-tighter">Major</span>
-               ) : (
-                 getSuitIcon(card.suit, "w-4 h-4 text-slate-700")
-               )}
-             </div>
+        {/* FRONT */}
+        <div className="absolute inset-0 backface-hidden rotate-y-180 rounded-lg bg-[#e8e4d9] border-4 border-slate-800 shadow-2xl overflow-hidden flex flex-col text-slate-900 z-10">
+           <div className="w-full px-2 py-1 flex justify-between items-center border-b border-slate-300 bg-[#dcd7cc] h-8 shrink-0">
+             <span className="text-xs font-bold font-serif">{card.number}</span>
+             {getSuitIcon(card.suit, "w-4 h-4 text-slate-700")}
            </div>
 
-           {/* Main Content Area */}
            <div className="flex-1 relative overflow-hidden flex items-center justify-center bg-slate-200">
-              
-              {/* Layer 1: Aesthetic Fallback (Gradient + Minimalist Icon) */}
-              <div className={`absolute inset-0 flex flex-col items-center justify-center p-4 bg-gradient-to-br ${fallbackGradient} ${card.isReversed ? 'rotate-180' : ''} z-10`}>
-                <div className={`w-20 h-20 sm:w-32 sm:h-32 opacity-20 drop-shadow-sm ${fallbackTextColor}`}>
-                  {card.arcana === ArcanaType.MAJOR 
-                    ? getMajorArcanaIcon(card.number, "w-full h-full stroke-[1.2]") 
-                    : getSuitIcon(card.suit, "w-full h-full stroke-[1.2]")
-                  }
-                </div>
+              {/* Fallback Layer */}
+              <div className={`absolute inset-0 flex items-center justify-center bg-gradient-to-br ${getSuitGradient(card.suit)} opacity-20`}>
+                {card.arcana === ArcanaType.MAJOR ? getMajorArcanaIcon(card.number, "w-20 h-20") : getSuitIcon(card.suit, "w-20 h-20")}
               </div>
 
-              {/* Layer 2: The Real Image */}
+              {/* Image Layer */}
               {!imageError && (
                 <img 
                   src={imagePath} 
                   alt={card.nameRu}
                   onLoad={() => setIsImageLoaded(true)}
                   onError={() => setImageError(true)}
-                  className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${isImageLoaded ? 'opacity-100' : 'opacity-0'} ${card.isReversed ? 'rotate-180' : ''} z-20`}
+                  className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 z-20 ${isImageLoaded ? 'opacity-100' : 'opacity-0'} ${card.isReversed ? 'rotate-180' : ''}`}
                 />
               )}
            </div>
 
-           {/* Footer */}
-           <div className="w-full bg-[#dcd7cc] border-t-2 border-slate-300 py-2 px-1 flex flex-col items-center justify-center shrink-0 min-h-[3.5rem] z-30">
-             <h3 className="font-serif font-bold text-xs sm:text-sm text-center leading-tight uppercase tracking-wide text-slate-900">
+           <div className="w-full bg-[#dcd7cc] border-t-2 border-slate-300 py-2 px-1 flex flex-col items-center justify-center shrink-0 min-h-[3.5rem]">
+             <h3 className="font-serif font-bold text-[10px] sm:text-xs text-center leading-tight uppercase">
                {card.nameRu}
              </h3>
-             {card.isReversed && (
-               <span className="text-[8px] uppercase tracking-widest text-red-700/60 mt-0.5">Перевернутая</span>
-             )}
+             {card.isReversed && <span className="text-[8px] uppercase tracking-widest text-red-700 mt-0.5">Перевернутая</span>}
            </div>
-
         </div>
       </div>
     </div>
   );
 };
-
-function romanize(num: number): string {
-  if (isNaN(num)) return "";
-  const digits = String(+num).split("");
-  const key = ["","C","CC","CCC","CD","D","DC","DCC","DCCC","CM",
-               "","X","XX","XXX","XL","L","LX","LXX","LXXX","XC",
-               "","I","II","III","IV","V","VI","VII","VIII","IX"];
-  let roman = "";
-  let i = 3;
-  while (i--) {
-    // @ts-ignore
-    roman = (key[+digits.pop() + (i * 10)] || "") + roman;
-  }
-  return Array(+digits.join("") + 1).join("M") + roman;
-}
 
 export default CardComponent;
