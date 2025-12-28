@@ -1,5 +1,5 @@
 // services/geminiService.ts
-// v3.5.0 @ 2025-05-21
+// v3.6.0 @ 2025-05-21
 import { GoogleGenAI, Type } from "@google/genai";
 import { DrawnCard, Spread } from "../types";
 
@@ -9,15 +9,20 @@ export interface AIConfig {
   model?: string;
 }
 
-// Универсальный способ получения API ключа на хостинге и локально
+/**
+ * Получение ключа API. 
+ * В Vite на хостинге переменные из render.yaml подставляются только если есть префикс VITE_.
+ */
 const getApiKey = () => {
-  // @ts-ignore - Vite/Node env compatibility
-  const key = (typeof process !== 'undefined' && process.env?.API_KEY) || 
-              // @ts-ignore
-              import.meta.env?.VITE_API_KEY || 
-              // @ts-ignore
-              import.meta.env?.VITE_API_KEYS; // Соответствие вашему render.yaml
-  return key;
+  // @ts-ignore
+  const env = import.meta.env || {};
+  // Пытаемся найти ключ по всем возможным вариантам
+  const key = env.VITE_API_KEYS || env.VITE_API_KEY || (typeof process !== 'undefined' ? process.env.API_KEY : null);
+  
+  if (!key) return null;
+  
+  // Если ключей несколько (через запятую), берем первый
+  return key.split(',')[0].trim();
 };
 
 export const DEFAULT_SYSTEM_PROMPT = `Ты великий мудрец и оракул. Ты видишь нити времени сплетающиеся в узорах судеб. Ты думаешь о себе (но никогда не сообщаешь эти мысли посетителю) так:
@@ -33,10 +38,7 @@ export const selectBestSpread = async (
   config?: AIConfig
 ): Promise<string> => {
   const apiKey = getApiKey();
-  if (!apiKey) {
-    console.error("Gemini API Key missing in environment!");
-    return "three_card_classic";
-  }
+  if (!apiKey) return "three_card_classic";
 
   const ai = new GoogleGenAI({ apiKey });
   const spreadOptions = availableSpreads.map(s => ({
@@ -45,7 +47,7 @@ export const selectBestSpread = async (
     description: s.description
   }));
 
-  const prompt = `You are a Master Tarot Reader. Question: "${question}". Return ONLY the JSON with the selected spreadId from this list: ${JSON.stringify(spreadOptions)}. Selection logic: daily/simple=1 card, choice=2, time/life=3, complex=5+, comprehensive=12. Result format: {"spreadId": "id"}`;
+  const prompt = `You are a Master Tarot Reader. Question: "${question}". Return ONLY the JSON with the selected spreadId from this list: ${JSON.stringify(spreadOptions)}. Result format: {"spreadId": "id"}`;
 
   try {
     const response = await ai.models.generateContent({
@@ -77,7 +79,9 @@ export const getTarotReading = async (
   config?: AIConfig
 ): Promise<string> => {
   const apiKey = getApiKey();
-  if (!apiKey) throw new Error("Missing API Key on hosting");
+  if (!apiKey) {
+    throw new Error("API Key is missing. Please set VITE_API_KEYS in your environment variables.");
+  }
 
   const ai = new GoogleGenAI({ apiKey });
 
@@ -97,11 +101,9 @@ export const getTarotReading = async (
     ${cardDescription}
 
     ТВОЯ ЗАДАЧА:
-    1. Напиши глубокое, мистическое толкование.
-    2. Используй Markdown: # для главных заголовков, ## для карт, > для мудрых советов.
-    3. Обращайся к вопрошающему на "Вы", будь мудр и образен.
-    4. Обязательно начни с вступления и закончи "Советом Оракула".
-    Язык: Русский.
+    1. Напиши глубокое, мистическое толкование на русском языке.
+    2. Используй Markdown: # для заголовков, ## для описания карт, > для советов.
+    3. Обязательно начни с вступления и закончи "Советом Оракула".
   `;
 
   try {
@@ -115,12 +117,13 @@ export const getTarotReading = async (
     });
     
     if (!response.text) {
-      throw new Error("Empty response from Gemini API");
+      throw new Error("The API returned an empty response. This might be due to safety filters.");
     }
     
     return response.text;
-  } catch (e) {
-    console.error("Gemini API Error details:", e);
-    throw e;
+  } catch (e: any) {
+    // Выбрасываем ошибку с сообщением, которое пришло от Google
+    const errorDetail = e.message || "Unknown error occurring during API call.";
+    throw new Error(errorDetail);
   }
 };

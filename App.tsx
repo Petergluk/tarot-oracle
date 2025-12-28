@@ -1,14 +1,14 @@
 // App.tsx
-// v3.5.0 @ 2025-05-21
+// v3.6.0 @ 2025-05-21
 /**
- * @description Главный компонент. Исправлено отображение на мобильных и логика работы на хостинге.
+ * @description Главный компонент. Адаптирован заголовок, восстановлены тексты, добавлена отладка ошибок API.
  * @changelog
- * 1. Заголовок адаптирован под мобильные (text-3xl).
- * 2. Возвращены оригинальные тексты кнопок.
- * 3. Исправлена инициализация API для работы в продакшене.
+ * 1. Заголовок: text-3xl на мобильных, адаптивные отступы.
+ * 2. Тексты: Возвращены "Просить совета" и "Спросить Оракула".
+ * 3. Отладка: В случае сбоя выводится техническое описание ошибки от Google.
  */
 import React, { useState, useEffect, useCallback } from 'react';
-import { Loader2, Sparkles, RefreshCw, Eye, ChevronDown, Settings, X } from 'lucide-react';
+import { Loader2, Sparkles, RefreshCw, Eye, ChevronDown, Settings, X, AlertCircle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
 // Internal imports
@@ -55,6 +55,7 @@ const App: React.FC = () => {
   const [drawnCards, setDrawnCards] = useState<DrawnCard[]>([]);
   const [revealedCount, setRevealedCount] = useState(0);
   const [readingText, setReadingText] = useState<string>('');
+  const [apiError, setApiError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isQuestionExpanded, setIsQuestionExpanded] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -76,19 +77,24 @@ const App: React.FC = () => {
   const handleQuestionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!question.trim()) return;
+    
     setAppState('consulting');
+    setApiError(null);
+    
     let spread = SPREADS[2]; 
     try {
       const spreadId = await Promise.race([
         selectBestSpread(question, SPREADS, aiConfig),
-        new Promise<string>((_, reject) => setTimeout(() => reject('timeout'), 3500))
+        new Promise<string>((_, reject) => setTimeout(() => reject('timeout'), 4000))
       ]);
       spread = SPREADS.find(s => s.id === spreadId) || SPREADS[2];
     } catch (err) {
-      console.warn("AI selection timeout/error, using default spread.");
+      console.warn("AI selection timeout, using default.");
     }
+
     setSelectedSpread(spread);
     setAppState('shuffling');
+    
     setTimeout(() => {
       setDrawnCards(drawCards(spread.cardCount));
       setRevealedCount(0);
@@ -100,12 +106,14 @@ const App: React.FC = () => {
   const fetchFinalReading = useCallback(async (currentQuestion: string, currentSpread: Spread, cards: DrawnCard[]) => {
     setIsLoading(true);
     setAppState('reading');
+    setApiError(null);
+    
     try {
       const text = await getTarotReading(currentQuestion, currentSpread, cards, aiConfig);
-      setReadingText(text || "Оракул молчит...");
-    } catch (err) {
-      console.error("API Error on hosting:", err);
-      setReadingText("## Ошибка Оракула\n\nНе удалось связаться с небесными сферами. Проверьте настройки API ключа (VITE_API_KEYS) на хостинге.");
+      setReadingText(text || "Оракул задумался и промолчал...");
+    } catch (err: any) {
+      console.error("Critical API Error:", err);
+      setApiError(err.message || "Unknown Error");
     } finally {
       setIsLoading(false);
     }
@@ -115,9 +123,10 @@ const App: React.FC = () => {
     if (index === revealedCount) {
       const newCount = revealedCount + 1;
       setRevealedCount(newCount);
+      
       if (selectedSpread && newCount === selectedSpread.cardCount) {
-        // Передаем текущие значения, чтобы избежать проблем с замыканием
-        fetchFinalReading(question, selectedSpread, drawnCards);
+        // Задержка перед вызовом для плавности анимации последней карты
+        setTimeout(() => fetchFinalReading(question, selectedSpread, drawnCards), 800);
       }
     }
   };
@@ -128,6 +137,7 @@ const App: React.FC = () => {
     setSelectedSpread(null);
     setRevealedCount(0);
     setReadingText('');
+    setApiError(null);
     setIsLoading(false);
   };
 
@@ -139,10 +149,12 @@ const App: React.FC = () => {
       {appState === 'intro' && (
         <div className="flex flex-col items-center justify-center min-h-screen text-center p-6 animate-fade-in">
           <Sparkles className="w-16 h-16 text-amber-200 mb-8 animate-pulse" />
-          <h1 className="text-3xl sm:text-6xl md:text-7xl font-bold text-amber-100 mb-8 font-serif tracking-widest uppercase break-words px-2">
+          <h1 className="text-4xl sm:text-6xl md:text-7xl font-bold text-amber-100 mb-8 font-serif tracking-widest uppercase px-4 max-w-full break-words leading-tight">
             Мистический Оракул
           </h1>
-          <button onClick={() => setAppState('input')} className="px-12 py-5 border border-amber-500/50 hover:bg-amber-900/30 text-amber-100 font-serif text-xl tracking-widest transition-all uppercase">Просить совета</button>
+          <button onClick={() => setAppState('input')} className="px-12 py-5 border border-amber-500/50 hover:bg-amber-900/30 text-amber-100 font-serif text-xl tracking-widest transition-all uppercase">
+            Просить совета
+          </button>
         </div>
       )}
 
@@ -158,7 +170,9 @@ const App: React.FC = () => {
               rows={2}
               placeholder="Ваш вопрос..."
             />
-            <button type="submit" disabled={!question.trim()} className="mt-16 px-12 py-4 bg-amber-700 hover:bg-amber-600 disabled:opacity-20 text-slate-950 font-bold uppercase tracking-widest rounded-full transition-all shadow-xl">Спросить Оракула</button>
+            <button type="submit" disabled={!question.trim()} className="mt-16 px-12 py-4 bg-amber-700 hover:bg-amber-600 disabled:opacity-20 text-slate-950 font-bold uppercase tracking-widest rounded-full transition-all shadow-xl">
+              Спросить Оракула
+            </button>
           </form>
         </div>
       )}
@@ -220,6 +234,20 @@ const App: React.FC = () => {
                     <Loader2 className="animate-spin text-amber-500 w-12 h-12" />
                     <span className="font-serif text-amber-200/60 tracking-widest uppercase animate-pulse text-sm">Трактовка знаков...</span>
                   </div>
+                ) : apiError ? (
+                  <div className="bg-red-950/30 border border-red-900/50 p-6 rounded-lg text-red-200">
+                    <div className="flex items-center gap-3 mb-4 text-red-400 font-bold uppercase tracking-widest text-sm">
+                      <AlertCircle className="w-5 h-5" />
+                      Связь прервана
+                    </div>
+                    <p className="mb-4 font-serif italic text-lg text-red-100/70">Небесные сферы не отвечают из-за земной преграды:</p>
+                    <div className="bg-black/40 p-4 rounded font-mono text-xs text-red-400 break-all border border-red-900/20">
+                      Error: {apiError}
+                    </div>
+                    <button onClick={resetApp} className="mt-8 w-full py-4 border border-red-900/40 hover:bg-red-900/20 transition text-red-100 uppercase tracking-widest text-xs font-bold">
+                      Попробовать снова
+                    </button>
+                  </div>
                 ) : (
                   <div className="text-slate-200 leading-relaxed font-light">
                     <ReactMarkdown components={{
@@ -232,7 +260,9 @@ const App: React.FC = () => {
                     }}>
                       {readingText}
                     </ReactMarkdown>
-                    <button onClick={resetApp} className="mt-16 w-full py-5 border border-slate-700 hover:border-amber-500 hover:bg-amber-900/10 text-amber-100 font-serif uppercase tracking-widest transition-all">Задать иной вопрос</button>
+                    <button onClick={resetApp} className="mt-16 w-full py-5 border border-slate-700 hover:border-amber-500 hover:bg-amber-900/10 text-amber-100 font-serif uppercase tracking-widest transition-all">
+                      Задать иной вопрос
+                    </button>
                   </div>
                 )}
               </div>
