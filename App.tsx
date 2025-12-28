@@ -1,13 +1,13 @@
 // App.tsx
-// v3.3.0 @ 2025-05-21
+// v3.5.0 @ 2025-05-21
 /**
- * @description Главный компонент приложения "Мистический Оракул".
+ * @description Главный компонент. Исправлено отображение на мобильных и логика работы на хостинге.
  * @changelog
- * 1. Исправлен баг "пустого толкования": толкование теперь вызывается сразу по открытию последней карты.
- * 2. Восстановлен оригинальный дизайн Markdown и заголовков.
- * 3. Улучшена обработка ошибок API на хостинге.
+ * 1. Заголовок адаптирован под мобильные (text-3xl).
+ * 2. Возвращены оригинальные тексты кнопок.
+ * 3. Исправлена инициализация API для работы в продакшене.
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Loader2, Sparkles, RefreshCw, Eye, ChevronDown, Settings, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
@@ -77,51 +77,50 @@ const App: React.FC = () => {
     e.preventDefault();
     if (!question.trim()) return;
     setAppState('consulting');
+    let spread = SPREADS[2]; 
     try {
-      const spreadId = await selectBestSpread(question, SPREADS, aiConfig);
-      const spread = SPREADS.find(s => s.id === spreadId) || SPREADS[2];
-      setSelectedSpread(spread);
-      setTimeout(() => {
-        setAppState('shuffling');
-        setTimeout(() => {
-          setDrawnCards(drawCards(spread.cardCount));
-          setRevealedCount(0);
-          setReadingText('');
-          setAppState('revealing');
-        }, 2000);
-      }, 1000);
+      const spreadId = await Promise.race([
+        selectBestSpread(question, SPREADS, aiConfig),
+        new Promise<string>((_, reject) => setTimeout(() => reject('timeout'), 3500))
+      ]);
+      spread = SPREADS.find(s => s.id === spreadId) || SPREADS[2];
     } catch (err) {
-      const fallback = SPREADS[2];
-      setSelectedSpread(fallback);
-      setAppState('shuffling');
-      setTimeout(() => {
-        setDrawnCards(drawCards(fallback.cardCount));
-        setAppState('revealing');
-      }, 2000);
+      console.warn("AI selection timeout/error, using default spread.");
     }
+    setSelectedSpread(spread);
+    setAppState('shuffling');
+    setTimeout(() => {
+      setDrawnCards(drawCards(spread.cardCount));
+      setRevealedCount(0);
+      setReadingText('');
+      setAppState('revealing');
+    }, 2000);
   };
+
+  const fetchFinalReading = useCallback(async (currentQuestion: string, currentSpread: Spread, cards: DrawnCard[]) => {
+    setIsLoading(true);
+    setAppState('reading');
+    try {
+      const text = await getTarotReading(currentQuestion, currentSpread, cards, aiConfig);
+      setReadingText(text || "Оракул молчит...");
+    } catch (err) {
+      console.error("API Error on hosting:", err);
+      setReadingText("## Ошибка Оракула\n\nНе удалось связаться с небесными сферами. Проверьте настройки API ключа (VITE_API_KEYS) на хостинге.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [aiConfig]);
 
   const handleRevealCard = (index: number) => {
-    if (index === revealedCount) setRevealedCount(prev => prev + 1);
-  };
-
-  useEffect(() => {
-    if (appState === 'revealing' && selectedSpread && revealedCount === selectedSpread.cardCount) {
-      const fetchReading = async () => {
-        setAppState('reading');
-        setIsLoading(true);
-        try {
-          const text = await getTarotReading(question, selectedSpread, drawnCards, aiConfig);
-          setReadingText(text || "Оракул молчит... попробуйте переформулировать вопрос.");
-        } catch (err) {
-          setReadingText("Туман окутал знаки. Связь с астралом прервана.");
-        } finally {
-          setIsLoading(false);
-        }
-      };
-      fetchReading();
+    if (index === revealedCount) {
+      const newCount = revealedCount + 1;
+      setRevealedCount(newCount);
+      if (selectedSpread && newCount === selectedSpread.cardCount) {
+        // Передаем текущие значения, чтобы избежать проблем с замыканием
+        fetchFinalReading(question, selectedSpread, drawnCards);
+      }
     }
-  }, [revealedCount, appState, selectedSpread, drawnCards, question, aiConfig]);
+  };
 
   const resetApp = () => {
     setAppState('intro');
@@ -129,6 +128,7 @@ const App: React.FC = () => {
     setSelectedSpread(null);
     setRevealedCount(0);
     setReadingText('');
+    setIsLoading(false);
   };
 
   return (
@@ -138,21 +138,23 @@ const App: React.FC = () => {
       
       {appState === 'intro' && (
         <div className="flex flex-col items-center justify-center min-h-screen text-center p-6 animate-fade-in">
-          <Sparkles className="w-20 h-20 text-amber-200 mb-8 animate-pulse" />
-          <h1 className="text-5xl sm:text-7xl font-bold text-amber-100 mb-8 font-serif tracking-widest">МИСТИЧЕСКИЙ ОРАКУЛ</h1>
+          <Sparkles className="w-16 h-16 text-amber-200 mb-8 animate-pulse" />
+          <h1 className="text-3xl sm:text-6xl md:text-7xl font-bold text-amber-100 mb-8 font-serif tracking-widest uppercase break-words px-2">
+            Мистический Оракул
+          </h1>
           <button onClick={() => setAppState('input')} className="px-12 py-5 border border-amber-500/50 hover:bg-amber-900/30 text-amber-100 font-serif text-xl tracking-widest transition-all uppercase">Просить совета</button>
         </div>
       )}
 
       {appState === 'input' && (
         <div className="flex flex-col items-center justify-center min-h-screen p-6 animate-fade-in text-center">
-          <h2 className="text-3xl font-serif text-amber-100 mb-12">Что желаете узнать у Вселенной?</h2>
+          <h2 className="text-2xl sm:text-3xl font-serif text-amber-100 mb-12 px-4">Что желаете узнать у Вселенной?</h2>
           <form onSubmit={handleQuestionSubmit} className="w-full max-w-2xl">
             <textarea
               autoFocus
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
-              className="w-full bg-transparent border-b-2 border-slate-700 focus:border-amber-500 text-center py-4 text-white outline-none font-serif text-2xl sm:text-3xl transition-colors placeholder:text-slate-800"
+              className="w-full bg-transparent border-b-2 border-slate-700 focus:border-amber-500 text-center py-4 text-white outline-none font-serif text-2xl sm:text-4xl transition-colors placeholder:text-slate-800"
               rows={2}
               placeholder="Ваш вопрос..."
             />
@@ -164,37 +166,37 @@ const App: React.FC = () => {
       {appState === 'consulting' && (
         <div className="flex flex-col items-center justify-center min-h-screen text-center animate-fade-in">
           <Eye className="w-16 h-16 text-amber-500 animate-pulse mb-4" />
-          <h3 className="text-2xl font-serif text-amber-100 tracking-widest uppercase">Оракул выбирает расклад...</h3>
+          <h3 className="text-xl font-serif text-amber-100 tracking-widest uppercase px-4">Оракул выбирает расклад...</h3>
         </div>
       )}
 
       {appState === 'shuffling' && (
         <div className="flex flex-col items-center justify-center min-h-screen text-center animate-fade-in p-6">
-          <h2 className="text-4xl font-serif text-amber-100 mb-4 uppercase tracking-tighter">{selectedSpread?.name}</h2>
-          <p className="text-slate-400 italic mb-16 max-w-md">{selectedSpread?.description}</p>
-          <div className="w-32 h-48 border-2 border-amber-500/30 bg-slate-800 rounded-xl flex items-center justify-center animate-bounce shadow-2xl">
+          <h2 className="text-3xl sm:text-4xl font-serif text-amber-100 mb-4 uppercase tracking-tighter">{selectedSpread?.name}</h2>
+          <p className="text-slate-400 italic mb-16 max-w-md px-4 text-sm sm:text-base">{selectedSpread?.description}</p>
+          <div className="w-28 h-40 sm:w-32 sm:h-48 border-2 border-amber-500/30 bg-slate-800 rounded-xl flex items-center justify-center animate-bounce shadow-2xl">
             <RefreshCw className="text-amber-500 w-10 h-10 animate-spin" />
           </div>
-          <p className="mt-10 text-amber-200/50 font-serif tracking-[0.3em] uppercase text-sm">Карты ложатся в ряд</p>
+          <p className="mt-10 text-amber-200/50 font-serif tracking-[0.3em] uppercase text-xs sm:text-sm">Тасуем колоду...</p>
         </div>
       )}
 
       {(appState === 'revealing' || appState === 'reading') && (
         <div className="flex flex-col min-h-screen bg-slate-950">
           <header className="sticky top-0 z-50 backdrop-blur-lg bg-slate-950/80 border-b border-white/5 p-4 flex justify-between items-center shadow-lg">
-            <div className="flex items-center gap-3 cursor-pointer overflow-hidden" onClick={() => setIsQuestionExpanded(!isQuestionExpanded)}>
+            <div className="flex items-center gap-3 cursor-pointer overflow-hidden max-w-[70%]" onClick={() => setIsQuestionExpanded(!isQuestionExpanded)}>
               <ChevronDown className={`text-amber-500 shrink-0 transition-transform ${isQuestionExpanded ? 'rotate-180' : ''}`} />
-              <span className="text-amber-100 font-serif truncate text-sm sm:text-base">{question}</span>
+              <span className="text-amber-100 font-serif truncate text-xs sm:text-sm">{question}</span>
             </div>
             <button onClick={resetApp} className="p-2 text-slate-500 hover:text-white transition-colors shrink-0"><RefreshCw className="w-5 h-5" /></button>
           </header>
 
-          <div className="flex-1 p-6 flex flex-col items-center pb-24">
-            <h3 className="text-2xl font-serif text-amber-500 mb-12 uppercase tracking-widest">{selectedSpread?.name}</h3>
-            <div className="flex flex-wrap justify-center gap-6 sm:gap-10 mb-16">
+          <div className="flex-1 p-4 sm:p-6 flex flex-col items-center pb-24">
+            <h3 className="text-xl sm:text-2xl font-serif text-amber-500 mb-8 sm:mb-12 uppercase tracking-widest text-center">{selectedSpread?.name}</h3>
+            <div className="flex flex-wrap justify-center gap-4 sm:gap-12 mb-16">
               {drawnCards.map((card, idx) => (
                 <div key={idx} className="flex flex-col items-center gap-4">
-                  <span className={`text-[10px] uppercase font-bold tracking-widest transition-colors ${revealedCount > idx ? 'text-amber-500' : 'text-slate-700'}`}>
+                  <span className={`text-[9px] sm:text-[10px] uppercase font-bold tracking-widest ${revealedCount > idx ? 'text-amber-500' : 'text-slate-700'}`}>
                     {idx + 1}. {selectedSpread?.positions[idx].name}
                   </span>
                   <CardComponent card={card} isRevealed={revealedCount > idx} onClick={() => handleRevealCard(idx)} />
@@ -204,28 +206,29 @@ const App: React.FC = () => {
 
             {revealedCount < (selectedSpread?.cardCount || 0) ? (
               <div className="text-center animate-bounce">
-                <p className="text-amber-200 font-serif text-xl tracking-wide">Откройте карту знамения #{revealedCount + 1}</p>
+                <p className="text-amber-200 font-serif text-lg sm:text-xl tracking-wide">Откройте карту #{revealedCount + 1}</p>
               </div>
             ) : (
-              <div className="w-full max-w-4xl bg-slate-900/60 border border-slate-800 p-8 md:p-16 rounded-xl shadow-2xl animate-slide-up backdrop-blur-sm">
-                <div className="flex items-center gap-4 mb-10 border-b border-slate-800 pb-6">
-                  <Sparkles className="text-amber-500 w-8 h-8" />
-                  <h2 className="text-3xl sm:text-4xl font-serif text-amber-100">Голос Оракула</h2>
+              <div className="w-full max-w-4xl bg-slate-900/60 border border-slate-800 p-6 sm:p-16 rounded-xl shadow-2xl animate-slide-up backdrop-blur-sm">
+                <div className="flex items-center gap-4 mb-8 sm:mb-10 border-b border-slate-800 pb-6">
+                  <Sparkles className="text-amber-500 w-6 h-6 sm:w-8 sm:h-8" />
+                  <h2 className="text-2xl sm:text-5xl font-serif text-amber-100">Голос Оракула</h2>
                 </div>
                 
                 {isLoading ? (
                   <div className="flex flex-col items-center gap-6 py-12">
                     <Loader2 className="animate-spin text-amber-500 w-12 h-12" />
-                    <span className="font-serif text-amber-200/60 tracking-widest uppercase animate-pulse">Трактовка знаков...</span>
+                    <span className="font-serif text-amber-200/60 tracking-widest uppercase animate-pulse text-sm">Трактовка знаков...</span>
                   </div>
                 ) : (
-                  <div className="text-slate-300 leading-relaxed">
+                  <div className="text-slate-200 leading-relaxed font-light">
                     <ReactMarkdown components={{
-                      h1: (props) => <h1 className="text-3xl font-serif text-amber-500 mb-6 mt-10 border-b border-amber-500/20 pb-2 uppercase tracking-wide" {...props} />,
-                      h2: (props) => <h2 className="text-2xl font-serif text-amber-200 mb-4 mt-8" {...props} />,
+                      h1: (props) => <h1 className="text-2xl sm:text-4xl font-serif text-amber-500 mb-8 mt-12 border-b border-amber-500/20 pb-2 uppercase" {...props} />,
+                      h2: (props) => <h2 className="text-xl sm:text-3xl font-serif text-amber-200 mb-6 mt-10" {...props} />,
+                      h3: (props) => <h3 className="text-lg sm:text-2xl font-serif text-amber-100 mb-4 mt-8" {...props} />,
                       strong: (props) => <strong className="text-amber-400 font-bold" {...props} />,
-                      p: (props) => <p className="mb-6 text-lg sm:text-xl font-light" {...props} />,
-                      blockquote: (props) => <blockquote className="border-l-4 border-amber-600/50 pl-6 italic text-slate-400 my-8 py-2 bg-amber-900/5" {...props} />,
+                      p: (props) => <p className="mb-6 text-base sm:text-xl leading-relaxed" {...props} />,
+                      blockquote: (props) => <blockquote className="border-l-4 border-amber-600/50 pl-4 sm:pl-6 italic text-slate-400 my-8 py-4 bg-amber-900/5 rounded-r-lg" {...props} />,
                     }}>
                       {readingText}
                     </ReactMarkdown>

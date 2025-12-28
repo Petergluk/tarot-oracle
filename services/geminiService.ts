@@ -1,5 +1,5 @@
 // services/geminiService.ts
-// v3.3.0 @ 2025-05-21
+// v3.5.0 @ 2025-05-21
 import { GoogleGenAI, Type } from "@google/genai";
 import { DrawnCard, Spread } from "../types";
 
@@ -8,6 +8,17 @@ export interface AIConfig {
   temperature?: number;
   model?: string;
 }
+
+// Универсальный способ получения API ключа на хостинге и локально
+const getApiKey = () => {
+  // @ts-ignore - Vite/Node env compatibility
+  const key = (typeof process !== 'undefined' && process.env?.API_KEY) || 
+              // @ts-ignore
+              import.meta.env?.VITE_API_KEY || 
+              // @ts-ignore
+              import.meta.env?.VITE_API_KEYS; // Соответствие вашему render.yaml
+  return key;
+};
 
 export const DEFAULT_SYSTEM_PROMPT = `Ты великий мудрец и оракул. Ты видишь нити времени сплетающиеся в узорах судеб. Ты думаешь о себе (но никогда не сообщаешь эти мысли посетителю) так:
 
@@ -21,14 +32,20 @@ export const selectBestSpread = async (
   availableSpreads: Spread[],
   config?: AIConfig
 ): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    console.error("Gemini API Key missing in environment!");
+    return "three_card_classic";
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
   const spreadOptions = availableSpreads.map(s => ({
     id: s.id,
     name: s.name,
     description: s.description
   }));
 
-  const prompt = `You are a Master Tarot Reader. Question: "${question}". Return ONLY the JSON with the selected spreadId from this list: ${JSON.stringify(spreadOptions)}. Selection logic: daily/simple=1 card, choice=2, time/life=3, complex=5+, comprehensive=12.`;
+  const prompt = `You are a Master Tarot Reader. Question: "${question}". Return ONLY the JSON with the selected spreadId from this list: ${JSON.stringify(spreadOptions)}. Selection logic: daily/simple=1 card, choice=2, time/life=3, complex=5+, comprehensive=12. Result format: {"spreadId": "id"}`;
 
   try {
     const response = await ai.models.generateContent({
@@ -46,11 +63,9 @@ export const selectBestSpread = async (
       }
     });
     
-    const resText = response.text;
-    const result = JSON.parse(resText || "{}");
+    const result = JSON.parse(response.text || "{}");
     return result.spreadId || "three_card_classic";
   } catch (e) {
-    console.warn("AI Spread Selection failed:", e);
     return "three_card_classic";
   }
 };
@@ -61,7 +76,10 @@ export const getTarotReading = async (
   cards: DrawnCard[],
   config?: AIConfig
 ): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const apiKey = getApiKey();
+  if (!apiKey) throw new Error("Missing API Key on hosting");
+
+  const ai = new GoogleGenAI({ apiKey });
 
   let cardDescription = "";
   cards.forEach((card, idx) => {
@@ -71,18 +89,18 @@ export const getTarotReading = async (
   });
 
   const prompt = `
-    КОНТЕКСТ СЕАНСА:
-    Запрос: "${question}"
-    Расклад: "${spread.name}"
-    КАРТЫ:
+    СЕАНС ТАРО:
+    Вопрос вопрошающего: "${question}"
+    Выбранный расклад: "${spread.name}"
+    
+    ВЫПАВШИЕ КАРТЫ:
     ${cardDescription}
 
-    ИНСТРУКЦИЯ:
-    1. Начни с философского вступления о текущем моменте.
-    2. Дай глубокую интерпретацию каждой карты в её позиции, связывая их в единый рассказ.
-    3. Твоя речь должна быть плавной и образной.
-    4. Используй Markdown: **Жирный** для карт, ### для заголовков.
-    5. В конце дай "Совет Мудреца".
+    ТВОЯ ЗАДАЧА:
+    1. Напиши глубокое, мистическое толкование.
+    2. Используй Markdown: # для главных заголовков, ## для карт, > для мудрых советов.
+    3. Обращайся к вопрошающему на "Вы", будь мудр и образен.
+    4. Обязательно начни с вступления и закончи "Советом Оракула".
     Язык: Русский.
   `;
 
@@ -95,9 +113,14 @@ export const getTarotReading = async (
         systemInstruction: config?.systemPrompt || DEFAULT_SYSTEM_PROMPT
       }
     });
-    return response.text || "";
+    
+    if (!response.text) {
+      throw new Error("Empty response from Gemini API");
+    }
+    
+    return response.text;
   } catch (e) {
-    console.error("Gemini API Error:", e);
+    console.error("Gemini API Error details:", e);
     throw e;
   }
 };
