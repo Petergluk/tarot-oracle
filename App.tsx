@@ -1,14 +1,8 @@
+
 // App.tsx
-// v3.6.0 @ 2025-05-21
-/**
- * @description Главный компонент. Адаптирован заголовок, восстановлены тексты, добавлена отладка ошибок API.
- * @changelog
- * 1. Заголовок: text-3xl на мобильных, адаптивные отступы.
- * 2. Тексты: Возвращены "Просить совета" и "Спросить Оракула".
- * 3. Отладка: В случае сбоя выводится техническое описание ошибки от Google.
- */
-import React, { useState, useEffect, useCallback } from 'react';
-import { Loader2, Sparkles, RefreshCw, Eye, ChevronDown, Settings, X, AlertCircle } from 'lucide-react';
+// v3.8.0 @ 2025-05-21
+import React, { useState, useCallback } from 'react';
+import { Loader2, Sparkles, RefreshCw, Eye, ChevronDown, Settings, X, AlertCircle, Info } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
 // Internal imports
@@ -20,12 +14,12 @@ import CardComponent from './components/CardComponent';
 type ExtendedAppState = AppState | 'consulting';
 
 const SettingsModal: React.FC<{ config: AIConfig; onConfigChange: (config: AIConfig) => void; onClose: () => void; }> = ({ config, onConfigChange, onClose }) => (
-  <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 font-sans">
-    <div className="bg-slate-900 border border-slate-700 w-full max-w-md p-6 rounded-lg shadow-2xl animate-fade-in relative text-left">
+  <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 font-sans text-left">
+    <div className="bg-slate-900 border border-slate-700 w-full max-w-lg p-6 rounded-lg shadow-2xl animate-fade-in relative max-h-[90vh] overflow-y-auto">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2 text-amber-500">
           <Settings className="w-5 h-5" />
-          <h2 className="font-serif text-xl tracking-wide">Настройки</h2>
+          <h2 className="font-serif text-xl tracking-wide">Настройки Оракула</h2>
         </div>
         <button onClick={onClose} className="text-slate-500 hover:text-white transition"><X className="w-6 h-6" /></button>
       </div>
@@ -42,7 +36,16 @@ const SettingsModal: React.FC<{ config: AIConfig; onConfigChange: (config: AICon
           <div className="flex justify-between text-xs uppercase text-slate-400 tracking-widest font-bold"><span>Температура</span><span className="text-amber-500">{config.temperature}</span></div>
           <input type="range" min="0.1" max="2.0" step="0.1" value={config.temperature} onChange={(e) => onConfigChange({...config, temperature: parseFloat(e.target.value)})} className="w-full accent-amber-500 h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer" />
         </div>
-        <button onClick={onClose} className="w-full py-3 bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold uppercase tracking-widest rounded transition-colors">Готово</button>
+        <div className="space-y-2">
+          <label className="text-xs uppercase text-slate-400 tracking-widest font-bold">Системный промпт</label>
+          <textarea 
+            value={config.systemPrompt} 
+            onChange={(e) => onConfigChange({...config, systemPrompt: e.target.value})}
+            className="w-full bg-slate-950 border border-slate-700 text-slate-200 p-3 text-sm rounded h-48 focus:border-amber-500 outline-none font-sans resize-none"
+            placeholder="Инструкции для ИИ..."
+          />
+        </div>
+        <button onClick={onClose} className="w-full py-3 bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold uppercase tracking-widest rounded transition-colors shadow-lg">Сохранить</button>
       </div>
     </div>
   </div>
@@ -85,11 +88,11 @@ const App: React.FC = () => {
     try {
       const spreadId = await Promise.race([
         selectBestSpread(question, SPREADS, aiConfig),
-        new Promise<string>((_, reject) => setTimeout(() => reject('timeout'), 4000))
+        new Promise<string>((_, reject) => setTimeout(() => reject('timeout'), 6000))
       ]);
       spread = SPREADS.find(s => s.id === spreadId) || SPREADS[2];
     } catch (err) {
-      console.warn("AI selection timeout, using default.");
+      console.warn("Spread selection issue, fallback to classic.");
     }
 
     setSelectedSpread(spread);
@@ -110,10 +113,9 @@ const App: React.FC = () => {
     
     try {
       const text = await getTarotReading(currentQuestion, currentSpread, cards, aiConfig);
-      setReadingText(text || "Оракул задумался и промолчал...");
+      setReadingText(text || "Оракул промолчал...");
     } catch (err: any) {
-      console.error("Critical API Error:", err);
-      setApiError(err.message || "Unknown Error");
+      setApiError(err.message || "Ошибка соединения");
     } finally {
       setIsLoading(false);
     }
@@ -125,7 +127,6 @@ const App: React.FC = () => {
       setRevealedCount(newCount);
       
       if (selectedSpread && newCount === selectedSpread.cardCount) {
-        // Задержка перед вызовом для плавности анимации последней карты
         setTimeout(() => fetchFinalReading(question, selectedSpread, drawnCards), 800);
       }
     }
@@ -143,13 +144,13 @@ const App: React.FC = () => {
 
   return (
     <main className="bg-slate-900 min-h-screen text-slate-200 font-sans relative overflow-x-hidden selection:bg-amber-500/30">
-      <div className="fixed top-0 left-0 w-16 h-16 z-[60]" onClick={() => setSecretClickCount(p => (p + 1 > 4 ? (setShowSettings(true), 0) : p + 1))} />
+      <div className="fixed top-0 left-0 w-16 h-16 z-[60] cursor-default" onClick={() => setSecretClickCount(p => (p + 1 > 4 ? (setShowSettings(true), 0) : p + 1))} />
       {showSettings && <SettingsModal config={aiConfig} onConfigChange={setAiConfig} onClose={() => setShowSettings(false)} />}
       
       {appState === 'intro' && (
         <div className="flex flex-col items-center justify-center min-h-screen text-center p-6 animate-fade-in">
           <Sparkles className="w-16 h-16 text-amber-200 mb-8 animate-pulse" />
-          <h1 className="text-4xl sm:text-6xl md:text-7xl font-bold text-amber-100 mb-8 font-serif tracking-widest uppercase px-4 max-w-full break-words leading-tight">
+          <h1 className="text-4xl sm:text-7xl font-bold text-amber-100 mb-8 font-serif tracking-widest uppercase px-4 max-w-full break-words leading-tight">
             Мистический Оракул
           </h1>
           <button onClick={() => setAppState('input')} className="px-12 py-5 border border-amber-500/50 hover:bg-amber-900/30 text-amber-100 font-serif text-xl tracking-widest transition-all uppercase">
@@ -240,16 +241,16 @@ const App: React.FC = () => {
                       <AlertCircle className="w-5 h-5" />
                       Связь прервана
                     </div>
-                    <p className="mb-4 font-serif italic text-lg text-red-100/70">Небесные сферы не отвечают из-за земной преграды:</p>
-                    <div className="bg-black/40 p-4 rounded font-mono text-xs text-red-400 break-all border border-red-900/20">
-                      Error: {apiError}
+                    <p className="mb-4 font-serif italic text-lg text-red-100/70 text-left">Оракул столкнулся с земным препятствием:</p>
+                    <div className="bg-black/40 p-4 rounded font-mono text-xs text-red-400 break-all border border-red-900/20 text-left">
+                      {apiError}
                     </div>
-                    <button onClick={resetApp} className="mt-8 w-full py-4 border border-red-900/40 hover:bg-red-900/20 transition text-red-100 uppercase tracking-widest text-xs font-bold">
+                    <button onClick={resetApp} className="mt-8 w-full py-4 bg-red-900/20 border border-red-900/40 hover:bg-red-900/40 transition text-red-100 uppercase tracking-widest text-xs font-bold rounded">
                       Попробовать снова
                     </button>
                   </div>
                 ) : (
-                  <div className="text-slate-200 leading-relaxed font-light">
+                  <div className="text-slate-200 leading-relaxed font-light text-left">
                     <ReactMarkdown components={{
                       h1: (props) => <h1 className="text-2xl sm:text-4xl font-serif text-amber-500 mb-8 mt-12 border-b border-amber-500/20 pb-2 uppercase" {...props} />,
                       h2: (props) => <h2 className="text-xl sm:text-3xl font-serif text-amber-200 mb-6 mt-10" {...props} />,

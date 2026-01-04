@@ -1,3 +1,4 @@
+
 import express from 'express';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import path from 'path';
@@ -9,9 +10,14 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Получаем ключи из переменных окружения сервера
+const API_KEYS = (process.env.VITE_API_KEYS || process.env.API_KEY || '').split(',').map(k => k.trim()).filter(Boolean);
+let currentKeyIndex = 0;
+
 app.use(express.json());
 
-// Proxy configuration for Google API
+// Прокси для Google API
+// Это позволяет делать запросы от имени сервера (из США/Европы), обходя блокировки
 app.use(
   '/google-api',
   createProxyMiddleware({
@@ -21,56 +27,37 @@ app.use(
       '^/google-api': '',
     },
     onProxyReq: (proxyReq, req, res) => {
-      // console.log(`Proxying ${req.method} request to: ${proxyReq.path}`);
+      // Если на сервере есть ключи, подставляем один из них
+      if (API_KEYS.length > 0) {
+        const key = API_KEYS[currentKeyIndex];
+        const url = new URL(proxyReq.path, 'https://generativelanguage.googleapis.com');
+        url.searchParams.set('key', key);
+        proxyReq.path = url.pathname + url.search;
+      }
     },
     onError: (err, req, res) => {
       console.error('Proxy Error:', err);
-      res.status(500).send('Proxy Error');
+      res.status(500).send('Ошибка связи с Оракулом через сервер');
     }
   })
 );
 
-// 1. Serve static files from 'public' directory FIRST
-// This allows you to see new images immediately without running 'npm run build'
-// We use fallthrough: true (default) to allow next middleware to handle if not found
-app.use(express.static(path.join(__dirname, 'public'), {
-  setHeaders: (res, path, stat) => {
-    // console.log(`Serving from public: ${path}`);
-  }
-}));
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'dist')));
 
-// 2. Serve static files from the 'dist' directory (built by Vite)
-app.use(express.static(path.join(__dirname, 'dist'), {
-  setHeaders: (res, path, stat) => {
-    // console.log(`Serving from dist: ${path}`);
-  }
-}));
-
-// Fallback to index.html for SPA routing
 app.get('*', (req, res) => {
-  // Check if request is for a card image that wasn't found in static middleware
   if (req.path.startsWith('/cards/')) {
-    console.error(`404 Image Not Found: ${req.path}`);
-    return res.status(404).send('Image not found');
+    return res.status(404).send('Card not found');
   }
-
-  // Try dist first, then public (though usually index.html is in dist after build)
   const distIndex = path.join(__dirname, 'dist', 'index.html');
   res.sendFile(distIndex, (err) => {
     if (err) {
-       // Fallback for dev mode if dist doesn't exist yet
        const publicIndex = path.join(__dirname, 'public', 'index.html');
-       res.sendFile(publicIndex, (err) => {
-         if (err) {
-           console.error(`404 Not Found: ${req.path}`);
-           res.status(404).send('Not Found');
-         }
-       });
+       res.sendFile(publicIndex);
     }
   });
 });
 
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-  console.log(`Serving static files from: ${path.join(__dirname, 'public')} and ${path.join(__dirname, 'dist')}`);
+  console.log(`Server running on port ${PORT}. AI Proxy active.`);
 });

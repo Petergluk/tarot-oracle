@@ -1,5 +1,5 @@
+
 // services/geminiService.ts
-// v3.6.0 @ 2025-05-21
 import { GoogleGenAI, Type } from "@google/genai";
 import { DrawnCard, Spread } from "../types";
 
@@ -10,22 +10,36 @@ export interface AIConfig {
 }
 
 /**
- * Получение ключа API. 
- * В Vite на хостинге переменные из render.yaml подставляются только если есть префикс VITE_.
+ * Определяем базовый URL. 
+ * В AI Studio (домен google) работаем напрямую.
+ * На хостинге используем локальный прокси /google-api.
  */
-const getApiKey = () => {
-  // @ts-ignore
-  const env = import.meta.env || {};
-  // Пытаемся найти ключ по всем возможным вариантам
-  const key = env.VITE_API_KEYS || env.VITE_API_KEY || (typeof process !== 'undefined' ? process.env.API_KEY : null);
-  
-  if (!key) return null;
-  
-  // Если ключей несколько (через запятую), берем первый
-  return key.split(',')[0].trim();
+const getBaseUrl = () => {
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host.includes('aistudio') || host.includes('google')) {
+      return undefined; // Напрямую
+    }
+    return window.location.origin + '/google-api'; // Через прокси
+  }
+  return undefined;
 };
 
-export const DEFAULT_SYSTEM_PROMPT = `Ты великий мудрец и оракул. Ты видишь нити времени сплетающиеся в узорах судеб. Ты думаешь о себе (но никогда не сообщаешь эти мысли посетителю) так:
+const getAllApiKeys = (): string[] => {
+  // @ts-ignore
+  const env = import.meta.env || {};
+  const rawValue = env.VITE_API_KEYS || env.VITE_API_KEY || (typeof process !== 'undefined' ? process.env.API_KEY : null);
+  
+  if (!rawValue) {
+    // Если мы на хостинге, прокси сам добавит ключ, но SDK хочет непустую строку
+    if (getBaseUrl()) return ["SERVER_SIDE_KEY"];
+    return [];
+  }
+  
+  return rawValue.split(',').map((k: string) => k.trim()).filter((k: string) => k.length > 0);
+};
+
+export const DEFAULT_SYSTEM_PROMPT = `Ты великий мудрец и оракул. Ты видишь нити времени сплетающиеся в узорах судеб. Ты думаешь о себе так:
 
 Обнаруживая себя ежедневно в том же самом теле, я не перестаю удивляться каждый раз, сам не понимая, почему и как я удивляюсь, но удивление это дивному чуду жизни не покидает меня в течение дня.
 
@@ -37,10 +51,9 @@ export const selectBestSpread = async (
   availableSpreads: Spread[],
   config?: AIConfig
 ): Promise<string> => {
-  const apiKey = getApiKey();
-  if (!apiKey) return "three_card_classic";
+  const keys = getAllApiKeys();
+  if (keys.length === 0) return "three_card_classic";
 
-  const ai = new GoogleGenAI({ apiKey });
   const spreadOptions = availableSpreads.map(s => ({
     id: s.id,
     name: s.name,
@@ -49,27 +62,37 @@ export const selectBestSpread = async (
 
   const prompt = `You are a Master Tarot Reader. Question: "${question}". Return ONLY the JSON with the selected spreadId from this list: ${JSON.stringify(spreadOptions)}. Result format: {"spreadId": "id"}`;
 
-  try {
-    const response = await ai.models.generateContent({
-      model: config?.model || "gemini-3-flash-preview",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            spreadId: { type: Type.STRING },
-          },
-          required: ["spreadId"]
+  for (const apiKey of keys) {
+    try {
+      const ai = new GoogleGenAI({ 
+        apiKey,
+        baseUrl: getBaseUrl() 
+      });
+      
+      const response = await ai.models.generateContent({
+        model: config?.model || "gemini-3-flash-preview",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              spreadId: { type: Type.STRING },
+            },
+            required: ["spreadId"]
+          }
         }
-      }
-    });
-    
-    const result = JSON.parse(response.text || "{}");
-    return result.spreadId || "three_card_classic";
-  } catch (e) {
-    return "three_card_classic";
+      });
+      
+      const result = JSON.parse(response.text || "{}");
+      return result.spreadId || "three_card_classic";
+    } catch (e) {
+      console.warn(`Attempt failed, trying next key...`, e);
+      continue;
+    }
   }
+  
+  return "three_card_classic";
 };
 
 export const getTarotReading = async (
@@ -78,12 +101,10 @@ export const getTarotReading = async (
   cards: DrawnCard[],
   config?: AIConfig
 ): Promise<string> => {
-  const apiKey = getApiKey();
-  if (!apiKey) {
-    throw new Error("API Key is missing. Please set VITE_API_KEYS in your environment variables.");
+  const keys = getAllApiKeys();
+  if (keys.length === 0) {
+    throw new Error("API ключи не найдены.");
   }
-
-  const ai = new GoogleGenAI({ apiKey });
 
   let cardDescription = "";
   cards.forEach((card, idx) => {
@@ -106,24 +127,31 @@ export const getTarotReading = async (
     3. Обязательно начни с вступления и закончи "Советом Оракула".
   `;
 
-  try {
-    const response = await ai.models.generateContent({
-      model: config?.model || "gemini-3-flash-preview",
-      contents: prompt,
-      config: {
-        temperature: config?.temperature ?? 1.1, 
-        systemInstruction: config?.systemPrompt || DEFAULT_SYSTEM_PROMPT
-      }
-    });
-    
-    if (!response.text) {
-      throw new Error("The API returned an empty response. This might be due to safety filters.");
+  let lastError = "";
+
+  for (const apiKey of keys) {
+    try {
+      const ai = new GoogleGenAI({ 
+        apiKey,
+        baseUrl: getBaseUrl() 
+      });
+      
+      const response = await ai.models.generateContent({
+        model: config?.model || "gemini-3-flash-preview",
+        contents: prompt,
+        config: {
+          temperature: config?.temperature ?? 1.1, 
+          systemInstruction: config?.systemPrompt || DEFAULT_SYSTEM_PROMPT
+        }
+      });
+      
+      if (response.text) return response.text;
+    } catch (e: any) {
+      lastError = e.message || "Unknown Error";
+      console.error(`Attempt failed: ${lastError}`);
+      continue;
     }
-    
-    return response.text;
-  } catch (e: any) {
-    // Выбрасываем ошибку с сообщением, которое пришло от Google
-    const errorDetail = e.message || "Unknown error occurring during API call.";
-    throw new Error(errorDetail);
   }
+
+  throw new Error(lastError || "Все попытки подключения не удались.");
 };
