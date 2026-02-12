@@ -1,6 +1,6 @@
 // components/CardComponent.tsx
 // v3.3.0 @ 2025-05-21
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { DrawnCard, Suit, ArcanaType } from '../types';
 import { 
   Sparkles, Moon, Sun, Sword, Wine, Coins, Club, 
@@ -76,10 +76,12 @@ const probeImageUrl = async (url: string) => {
 const CardComponent: React.FC<CardComponentProps> = ({ card, isRevealed, onClick, className = '' }) => {
   const [isImageLoaded, setIsImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
   
   useEffect(() => {
     setIsImageLoaded(false);
     setImageError(false);
+    setActiveImageIndex(0);
   }, [card.id]);
 
   const folder = card.arcana === ArcanaType.MAJOR ? 'major' : 'minor';
@@ -88,7 +90,8 @@ const CardComponent: React.FC<CardComponentProps> = ({ card, isRevealed, onClick
   const baseUrl = import.meta.env.BASE_URL || '/';
   const normalizedBaseUrl = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
   const staticImagePath = `${normalizedBaseUrl}cards/${folder}/${card.imageFileName}`;
-  const imagePath = bundledImagePath || staticImagePath;
+  const imageCandidates = useMemo(() => [bundledImagePath, staticImagePath].filter((value, index, array): value is string => Boolean(value) && array.indexOf(value) === index), [bundledImagePath, staticImagePath]);
+  const imagePath = imageCandidates[activeImageIndex];
 
   useEffect(() => {
     if (!isRevealed || !isTarotImageDebugEnabled()) return;
@@ -122,6 +125,8 @@ const CardComponent: React.FC<CardComponentProps> = ({ card, isRevealed, onClick
     bundledImagePath,
     staticImagePath,
     imagePath,
+    activeImageIndex,
+    imageCandidates,
   ]);
 
   return (
@@ -161,17 +166,31 @@ const CardComponent: React.FC<CardComponentProps> = ({ card, isRevealed, onClick
               </div>
 
               {/* Real Card Image */}
-              {!imageError && (
+              {!imageError && imagePath && (
                 <img 
                   src={imagePath} 
                   alt={card.nameRu}
                   onLoad={() => setIsImageLoaded(true)}
                   onError={(event) => {
+                    const attemptedSrc = event.currentTarget.currentSrc || imagePath;
+                    const nextIndex = activeImageIndex + 1;
+                    const hasNextCandidate = nextIndex < imageCandidates.length;
+
                     console.error('[Tarot image] failed to load', {
                       cardId: card.id,
                       imageFileName: card.imageFileName,
-                      attemptedSrc: event.currentTarget.currentSrc || imagePath,
+                      attemptedSrc,
+                      activeImageIndex,
+                      imageCandidates,
+                      willRetryWith: hasNextCandidate ? imageCandidates[nextIndex] : null,
                     });
+
+                    if (hasNextCandidate) {
+                      setIsImageLoaded(false);
+                      setActiveImageIndex(nextIndex);
+                      return;
+                    }
+
                     setImageError(true);
                   }}
                   className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 z-20 ${isImageLoaded ? 'opacity-100' : 'opacity-0'} ${card.isReversed ? 'rotate-180' : ''}`}
