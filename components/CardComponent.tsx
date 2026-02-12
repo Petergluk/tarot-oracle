@@ -42,6 +42,22 @@ const getMajorArcanaIcon = (id: number, className: string = "w-full h-full") => 
   return <Icon className={className} />;
 };
 
+
+const bundledCardImages = import.meta.glob('../public/cards/**/*.{jpg,jpeg,png,webp}', {
+  eager: true,
+  import: 'default',
+}) as Record<string, string>;
+
+const bundledCardsByRelativePath = Object.entries(bundledCardImages).reduce<Record<string, string>>((acc, [key, url]) => {
+  const marker = '/public/cards/';
+  const markerIndex = key.indexOf(marker);
+  if (markerIndex >= 0) {
+    const relativePath = key.slice(markerIndex + marker.length);
+    acc[relativePath] = url;
+  }
+  return acc;
+}, {});
+
 const CardComponent: React.FC<CardComponentProps> = ({ card, isRevealed, onClick, className = '' }) => {
   const [isImageLoaded, setIsImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
@@ -51,8 +67,13 @@ const CardComponent: React.FC<CardComponentProps> = ({ card, isRevealed, onClick
     setImageError(false);
   }, [card.id]);
 
-  const folder = card.arcana === ArcanaType.MAJOR ? 'major' : 'minor'; 
-  const imagePath = `/cards/${folder}/${card.imageFileName}`;
+  const folder = card.arcana === ArcanaType.MAJOR ? 'major' : 'minor';
+  const imageRelativePath = `${folder}/${card.imageFileName}`;
+  const bundledImagePath = bundledCardsByRelativePath[imageRelativePath];
+  const baseUrl = import.meta.env.BASE_URL || '/';
+  const normalizedBaseUrl = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+  const staticImagePath = `${normalizedBaseUrl}cards/${folder}/${card.imageFileName}`;
+  const imagePath = bundledImagePath || staticImagePath;
 
   return (
     <div 
@@ -96,7 +117,14 @@ const CardComponent: React.FC<CardComponentProps> = ({ card, isRevealed, onClick
                   src={imagePath} 
                   alt={card.nameRu}
                   onLoad={() => setIsImageLoaded(true)}
-                  onError={() => setImageError(true)}
+                  onError={(event) => {
+                    console.error('[Tarot image] failed to load', {
+                      cardId: card.id,
+                      imageFileName: card.imageFileName,
+                      attemptedSrc: event.currentTarget.currentSrc || imagePath,
+                    });
+                    setImageError(true);
+                  }}
                   className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 z-20 ${isImageLoaded ? 'opacity-100' : 'opacity-0'} ${card.isReversed ? 'rotate-180' : ''}`}
                 />
               )}
