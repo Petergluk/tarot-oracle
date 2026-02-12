@@ -51,8 +51,10 @@ const CardComponent: React.FC<CardComponentProps> = ({ card, isRevealed, onClick
     setImageError(false);
   }, [card.id]);
 
-  const folder = card.arcana === ArcanaType.MAJOR ? 'major' : 'minor'; 
-  const imagePath = `/cards/${folder}/${card.imageFileName}`;
+  const folder = card.arcana === ArcanaType.MAJOR ? 'major' : 'minor';
+  const baseUrl = import.meta.env.BASE_URL || '/';
+  const normalizedBaseUrl = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+  const imagePath = `${normalizedBaseUrl}cards/${folder}/${card.imageFileName}`;
 
   return (
     <div 
