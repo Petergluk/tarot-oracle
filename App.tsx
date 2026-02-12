@@ -1,7 +1,7 @@
 
 // App.tsx
 // v3.8.0 @ 2025-05-21
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { Loader2, Sparkles, RefreshCw, Eye, ChevronDown, Settings, X, AlertCircle, Info } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
@@ -12,6 +12,21 @@ import { getTarotReading, selectBestSpread, AIConfig, DEFAULT_SYSTEM_PROMPT } fr
 import CardComponent from './components/CardComponent';
 
 type ExtendedAppState = AppState | 'consulting';
+
+
+type DebugProbeResult = {
+  label: string;
+  url: string;
+  ok: boolean;
+  status: number | string;
+};
+
+type RuntimeDebugInfo = {
+  loaded: boolean;
+  cardsStatusHttpCode: number | null;
+  cardsStatusPayload: unknown;
+  probes: DebugProbeResult[];
+};
 
 const SettingsModal: React.FC<{ config: AIConfig; onConfigChange: (config: AIConfig) => void; onClose: () => void; }> = ({ config, onConfigChange, onClose }) => (
   <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 font-sans text-left">
@@ -64,11 +79,80 @@ const App: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [secretClickCount, setSecretClickCount] = useState(0);
 
+
+  const debugImagesEnabled = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    return window.location.search.includes('debugImages=1') || localStorage.getItem('debugTarotImages') === '1';
+  }, []);
+
+  const [runtimeDebugInfo, setRuntimeDebugInfo] = useState<RuntimeDebugInfo>({
+    loaded: false,
+    cardsStatusHttpCode: null,
+    cardsStatusPayload: null,
+    probes: [],
+  });
+
   const [aiConfig, setAiConfig] = useState<AIConfig>({
     temperature: 1.1,
     systemPrompt: DEFAULT_SYSTEM_PROMPT,
     model: 'gemini-3-flash-preview'
   });
+
+
+  useEffect(() => {
+    if (!debugImagesEnabled || typeof window === 'undefined') return;
+
+    const runRuntimeDebug = async () => {
+      const baseUrl = import.meta.env.BASE_URL || '/';
+      const normalizedBaseUrl = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+
+      const probeTargets = [
+        { label: 'Static card from public/cards', url: `${normalizedBaseUrl}cards/major/01_the_fool.jpg` },
+        { label: 'Another static card', url: `${normalizedBaseUrl}cards/minor/02_two_of_wands.jpg` },
+      ];
+
+      const probes: DebugProbeResult[] = [];
+      for (const target of probeTargets) {
+        try {
+          const response = await fetch(target.url, { method: 'HEAD', cache: 'no-store' });
+          probes.push({ label: target.label, url: target.url, ok: response.ok, status: response.status });
+        } catch (error) {
+          probes.push({
+            label: target.label,
+            url: target.url,
+            ok: false,
+            status: error instanceof Error ? error.message : 'network_error',
+          });
+        }
+      }
+
+      let cardsStatusHttpCode: number | null = null;
+      let cardsStatusPayload: unknown = null;
+      try {
+        const response = await fetch(`${normalizedBaseUrl}debug/cards-status`, { cache: 'no-store' });
+        cardsStatusHttpCode = response.status;
+        cardsStatusPayload = await response.text();
+      } catch (error) {
+        cardsStatusPayload = error instanceof Error ? error.message : String(error);
+      }
+
+      console.info('[Tarot runtime debug]', {
+        location: window.location.href,
+        cardsStatusHttpCode,
+        cardsStatusPayload,
+        probes,
+      });
+
+      setRuntimeDebugInfo({
+        loaded: true,
+        cardsStatusHttpCode,
+        cardsStatusPayload,
+        probes,
+      });
+    };
+
+    runRuntimeDebug();
+  }, [debugImagesEnabled]);
 
   const drawCards = (count: number): DrawnCard[] => {
     const deckCopy = [...DECK].sort(() => Math.random() - 0.5);
@@ -271,6 +355,29 @@ const App: React.FC = () => {
           </div>
         </div>
       )}
+
+      {debugImagesEnabled && (
+        <div className="fixed bottom-3 right-3 z-[120] w-[22rem] max-w-[92vw] bg-black/85 border border-amber-600/40 rounded-lg p-3 text-[11px] text-left shadow-2xl backdrop-blur">
+          <div className="font-bold text-amber-300 uppercase tracking-wider mb-2">Image Debug Panel</div>
+          {!runtimeDebugInfo.loaded ? (
+            <div className="text-slate-300">Проверяем runtime-статус...</div>
+          ) : (
+            <>
+              <div className="text-slate-200 mb-1">`/debug/cards-status`: <span className={runtimeDebugInfo.cardsStatusHttpCode === 200 ? 'text-emerald-300' : 'text-red-300'}>{String(runtimeDebugInfo.cardsStatusHttpCode)}</span></div>
+              <div className="text-slate-400 break-all mb-2 max-h-16 overflow-auto">{String(runtimeDebugInfo.cardsStatusPayload)}</div>
+              <div className="space-y-1">
+                {runtimeDebugInfo.probes.map((probe) => (
+                  <div key={probe.url} className="text-slate-300">
+                    <span className={probe.ok ? 'text-emerald-300' : 'text-red-300'}>{probe.ok ? 'OK' : 'FAIL'}</span>{' '}
+                    {probe.status} — {probe.label}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
     </main>
   );
 };
