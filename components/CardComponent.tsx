@@ -58,6 +58,21 @@ const bundledCardsByRelativePath = Object.entries(bundledCardImages).reduce<Reco
   return acc;
 }, {});
 
+
+const isTarotImageDebugEnabled = () => {
+  if (typeof window === 'undefined') return false;
+  return window.location.search.includes('debugImages=1') || localStorage.getItem('debugTarotImages') === '1';
+};
+
+const probeImageUrl = async (url: string) => {
+  try {
+    const response = await fetch(url, { method: 'HEAD', cache: 'no-store' });
+    return { ok: response.ok, status: response.status };
+  } catch (error) {
+    return { ok: false, status: 'network_error', error: error instanceof Error ? error.message : String(error) };
+  }
+};
+
 const CardComponent: React.FC<CardComponentProps> = ({ card, isRevealed, onClick, className = '' }) => {
   const [isImageLoaded, setIsImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
@@ -74,6 +89,40 @@ const CardComponent: React.FC<CardComponentProps> = ({ card, isRevealed, onClick
   const normalizedBaseUrl = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
   const staticImagePath = `${normalizedBaseUrl}cards/${folder}/${card.imageFileName}`;
   const imagePath = bundledImagePath || staticImagePath;
+
+  useEffect(() => {
+    if (!isRevealed || !isTarotImageDebugEnabled()) return;
+
+    const runDiagnostics = async () => {
+      const [resolvedProbe, staticProbe] = await Promise.all([
+        probeImageUrl(imagePath),
+        imagePath !== staticImagePath ? probeImageUrl(staticImagePath) : Promise.resolve(null),
+      ]);
+
+      console.info('[Tarot image][diagnostics]', {
+        cardId: card.id,
+        cardName: card.nameRu,
+        imageFileName: card.imageFileName,
+        bundledImagePath: bundledImagePath || null,
+        staticImagePath,
+        resolvedImagePath: imagePath,
+        probes: {
+          resolved: resolvedProbe,
+          static: staticProbe,
+        },
+      });
+    };
+
+    runDiagnostics();
+  }, [
+    isRevealed,
+    card.id,
+    card.nameRu,
+    card.imageFileName,
+    bundledImagePath,
+    staticImagePath,
+    imagePath,
+  ]);
 
   return (
     <div 

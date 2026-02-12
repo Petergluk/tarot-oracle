@@ -74,6 +74,23 @@ app.get('/debug/cards-status', (req, res) => {
   });
 });
 
+
+app.use('/cards', (req, res, next) => {
+  const normalizedPath = req.path.replace(/^\/+/, '');
+  const publicFilePath = path.join(__dirname, 'public', 'cards', normalizedPath);
+  const distFilePath = path.join(__dirname, 'dist', 'cards', normalizedPath);
+
+  console.info('[cards request]', {
+    method: req.method,
+    url: req.originalUrl,
+    publicExists: fs.existsSync(publicFilePath),
+    distExists: fs.existsSync(distFilePath),
+    referer: req.get('referer') || null,
+  });
+
+  next();
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.static(path.join(__dirname, 'dist')));
 
