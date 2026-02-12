@@ -2,6 +2,7 @@
 import express from 'express';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -41,6 +42,37 @@ app.use(
     }
   })
 );
+
+
+const countFilesRecursive = (dirPath) => {
+  if (!fs.existsSync(dirPath)) return 0;
+  const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+  return entries.reduce((count, entry) => {
+    const currentPath = path.join(dirPath, entry.name);
+    return count + (entry.isDirectory() ? countFilesRecursive(currentPath) : 1);
+  }, 0);
+};
+
+app.get('/debug/cards-status', (req, res) => {
+  const publicCardsPath = path.join(__dirname, 'public', 'cards');
+  const distCardsPath = path.join(__dirname, 'dist', 'cards');
+  const distAssetsPath = path.join(__dirname, 'dist', 'assets');
+
+  const distImageCount = fs.existsSync(distAssetsPath)
+    ? fs.readdirSync(distAssetsPath).filter((fileName) => /\.(jpg|jpeg|png|webp)$/i.test(fileName)).length
+    : 0;
+
+  res.json({
+    runtime: 'node-express',
+    publicCardsExists: fs.existsSync(publicCardsPath),
+    distCardsExists: fs.existsSync(distCardsPath),
+    distAssetsExists: fs.existsSync(distAssetsPath),
+    publicCardsCount: countFilesRecursive(publicCardsPath),
+    distCardsCount: countFilesRecursive(distCardsPath),
+    distImageAssetsCount: distImageCount,
+    examplePublicCardUrl: '/cards/major/01_the_fool.jpg',
+  });
+});
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.static(path.join(__dirname, 'dist')));
