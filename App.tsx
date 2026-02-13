@@ -28,6 +28,14 @@ type RuntimeDebugInfo = {
   probes: DebugProbeResult[];
 };
 
+type ImageErrorEventPayload = {
+  cardId: string;
+  imageFileName: string;
+  attemptedSrc: string;
+  imageCandidates: string[];
+  willRetryWith: string | null;
+};
+
 const SettingsModal: React.FC<{ config: AIConfig; onConfigChange: (config: AIConfig) => void; onClose: () => void; }> = ({ config, onConfigChange, onClose }) => (
   <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 font-sans text-left">
     <div className="bg-slate-900 border border-slate-700 w-full max-w-lg p-6 rounded-lg shadow-2xl animate-fade-in relative max-h-[90vh] overflow-y-auto">
@@ -91,6 +99,7 @@ const App: React.FC = () => {
     cardsStatusPayload: null,
     probes: [],
   });
+  const [imageErrors, setImageErrors] = useState<ImageErrorEventPayload[]>([]);
 
   const [aiConfig, setAiConfig] = useState<AIConfig>({
     temperature: 1.1,
@@ -99,8 +108,10 @@ const App: React.FC = () => {
   });
 
 
+  const shouldShowDebugPanel = debugImagesEnabled || imageErrors.length > 0;
+
   useEffect(() => {
-    if (!debugImagesEnabled || typeof window === 'undefined') return;
+    if (!shouldShowDebugPanel || typeof window === 'undefined') return;
 
     const runRuntimeDebug = async () => {
       const baseUrl = import.meta.env.BASE_URL || '/';
@@ -152,7 +163,21 @@ const App: React.FC = () => {
     };
 
     runRuntimeDebug();
-  }, [debugImagesEnabled]);
+  }, [shouldShowDebugPanel]);
+
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handler = (event: Event) => {
+      const customEvent = event as CustomEvent<ImageErrorEventPayload>;
+      if (!customEvent.detail) return;
+      setImageErrors((prev) => [customEvent.detail, ...prev].slice(0, 6));
+    };
+
+    window.addEventListener('tarot:image-error', handler as EventListener);
+    return () => window.removeEventListener('tarot:image-error', handler as EventListener);
+  }, []);
 
   const drawCards = (count: number): DrawnCard[] => {
     const deckCopy = [...DECK].sort(() => Math.random() - 0.5);
@@ -298,7 +323,12 @@ const App: React.FC = () => {
                   <span className={`text-[9px] sm:text-[10px] uppercase font-bold tracking-widest ${revealedCount > idx ? 'text-amber-500' : 'text-slate-700'}`}>
                     {idx + 1}. {selectedSpread?.positions[idx].name}
                   </span>
-                  <CardComponent card={card} isRevealed={revealedCount > idx} onClick={() => handleRevealCard(idx)} />
+                  <CardComponent
+                    card={card}
+                    isRevealed={revealedCount > idx}
+                    onClick={() => handleRevealCard(idx)}
+                    onImageError={(payload) => setImageErrors((prev) => [payload, ...prev].slice(0, 6))}
+                  />
                 </div>
               ))}
             </div>
@@ -356,9 +386,9 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {debugImagesEnabled && (
+      {shouldShowDebugPanel && (
         <div className="fixed bottom-3 right-3 z-[120] w-[22rem] max-w-[92vw] bg-black/85 border border-amber-600/40 rounded-lg p-3 text-[11px] text-left shadow-2xl backdrop-blur">
-          <div className="font-bold text-amber-300 uppercase tracking-wider mb-2">Image Debug Panel</div>
+          <div className="font-bold text-amber-300 uppercase tracking-wider mb-2">Image Debug Panel {debugImagesEnabled ? '(manual)' : '(auto)'}</div>
           {!runtimeDebugInfo.loaded ? (
             <div className="text-slate-300">Проверяем runtime-статус...</div>
           ) : (
@@ -373,6 +403,16 @@ const App: React.FC = () => {
                   </div>
                 ))}
               </div>
+
+              {imageErrors.length > 0 && (
+                <div className="mt-2 border-t border-slate-700 pt-2 max-h-28 overflow-auto space-y-1">
+                  {imageErrors.map((errorItem, index) => (
+                    <div key={`${errorItem.cardId}-${index}`} className="text-red-300 break-all">
+                      {errorItem.cardId}: {errorItem.attemptedSrc}
+                    </div>
+                  ))}
+                </div>
+              )}
             </>
           )}
         </div>

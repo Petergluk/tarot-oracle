@@ -14,6 +14,13 @@ interface CardComponentProps {
   isRevealed: boolean;
   onClick?: () => void;
   className?: string;
+  onImageError?: (payload: {
+    cardId: string;
+    imageFileName: string;
+    attemptedSrc: string;
+    imageCandidates: string[];
+    willRetryWith: string | null;
+  }) => void;
 }
 
 const getSuitGradient = (suit: Suit) => {
@@ -73,7 +80,7 @@ const probeImageUrl = async (url: string) => {
   }
 };
 
-const CardComponent: React.FC<CardComponentProps> = ({ card, isRevealed, onClick, className = '' }) => {
+const CardComponent: React.FC<CardComponentProps> = ({ card, isRevealed, onClick, className = '', onImageError }) => {
   const [isImageLoaded, setIsImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
@@ -176,14 +183,23 @@ const CardComponent: React.FC<CardComponentProps> = ({ card, isRevealed, onClick
                     const nextIndex = activeImageIndex + 1;
                     const hasNextCandidate = nextIndex < imageCandidates.length;
 
-                    console.error('[Tarot image] failed to load', {
+                    const errorPayload = {
                       cardId: card.id,
                       imageFileName: card.imageFileName,
                       attemptedSrc,
-                      activeImageIndex,
                       imageCandidates,
                       willRetryWith: hasNextCandidate ? imageCandidates[nextIndex] : null,
+                    };
+
+                    console.error('[Tarot image] failed to load', {
+                      ...errorPayload,
+                      activeImageIndex,
                     });
+
+                    onImageError?.(errorPayload);
+                    if (typeof window !== 'undefined') {
+                      window.dispatchEvent(new CustomEvent('tarot:image-error', { detail: errorPayload }));
+                    }
 
                     if (hasNextCandidate) {
                       setIsImageLoaded(false);
