@@ -56,15 +56,16 @@ const bundledCardImages = import.meta.glob('../public/cards/**/*.{jpg,jpeg,png,w
 }) as Record<string, string>;
 
 const bundledCardsByRelativePath = Object.entries(bundledCardImages).reduce<Record<string, string>>((acc, [key, url]) => {
-  const marker = '/public/cards/';
-  const markerIndex = key.indexOf(marker);
-  if (markerIndex >= 0) {
-    const relativePath = key.slice(markerIndex + marker.length);
-    acc[relativePath] = url;
+  const normalizedKey = key.replace(/\\/g, '/');
+  const match = normalizedKey.match(/(?:^|\/)cards\/(major|minor)\/([^\/]+)$/i);
+
+  if (match) {
+    const [, folder, fileName] = match;
+    acc[`${folder.toLowerCase()}/${fileName}`] = url;
   }
+
   return acc;
 }, {});
-
 
 const isTarotImageDebugEnabled = () => {
   if (typeof window === 'undefined') return false;

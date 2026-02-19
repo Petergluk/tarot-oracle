@@ -19,6 +19,8 @@ type DebugProbeResult = {
   url: string;
   ok: boolean;
   status: number | string;
+  contentType?: string | null;
+  looksLikeImage?: boolean;
 };
 
 type RuntimeDebugInfo = {
@@ -125,14 +127,26 @@ const App: React.FC = () => {
       const probes: DebugProbeResult[] = [];
       for (const target of probeTargets) {
         try {
-          const response = await fetch(target.url, { method: 'HEAD', cache: 'no-store' });
-          probes.push({ label: target.label, url: target.url, ok: response.ok, status: response.status });
+          const response = await fetch(target.url, { method: 'GET', cache: 'no-store' });
+          const contentType = response.headers.get('content-type');
+          const looksLikeImage = Boolean(contentType && contentType.startsWith('image/'));
+
+          probes.push({
+            label: target.label,
+            url: target.url,
+            ok: response.ok && looksLikeImage,
+            status: response.status,
+            contentType,
+            looksLikeImage,
+          });
         } catch (error) {
           probes.push({
             label: target.label,
             url: target.url,
             ok: false,
             status: error instanceof Error ? error.message : 'network_error',
+            contentType: null,
+            looksLikeImage: false,
           });
         }
       }
@@ -399,7 +413,7 @@ const App: React.FC = () => {
                 {runtimeDebugInfo.probes.map((probe) => (
                   <div key={probe.url} className="text-slate-300">
                     <span className={probe.ok ? 'text-emerald-300' : 'text-red-300'}>{probe.ok ? 'OK' : 'FAIL'}</span>{' '}
-                    {probe.status} — {probe.label}
+                    {probe.status} ({probe.contentType || 'no-content-type'}) — {probe.label}
                   </div>
                 ))}
               </div>
