@@ -233,8 +233,9 @@ const App: React.FC = () => {
       {appState === 'intro' && (
         <div className="flex flex-col items-center justify-center min-h-screen text-center p-6 animate-fade-in relative pb-32">
           <Sparkles className="w-16 h-16 text-amber-200 mb-8 animate-pulse" />
-          <h1 className="text-4xl sm:text-7xl font-bold text-amber-100 mb-8 font-serif tracking-widest uppercase px-4 max-w-full break-words leading-tight">
-            Мистический Оракул
+          <h1 className="text-4xl sm:text-7xl font-bold text-amber-100 mb-8 font-serif tracking-widest uppercase px-4 max-w-full leading-tight flex flex-col sm:flex-row items-center gap-0 sm:gap-4">
+            <span className="whitespace-nowrap">Мистический</span>
+            <span className="whitespace-nowrap">Оракул</span>
           </h1>
           <button onClick={() => setAppState('input')} className="px-12 py-5 border border-amber-500/50 hover:bg-amber-900/30 text-amber-100 font-serif text-xl tracking-widest transition-all uppercase">
             Просить совета
@@ -257,7 +258,7 @@ const App: React.FC = () => {
                 </div>
                 <div className="leading-relaxed">
                   <strong className="text-amber-500 block mb-1 uppercase tracking-widest font-bold text-[10px] sm:text-[11px]">Совет Оракула</strong>
-                  Часто обращаетесь за советом? Добавьте Оракула <strong>на экран «Домой»</strong> вашего телефона. На iPhone нажмите значок "Поделиться" в браузере, на Android — меню (три точки), затем выберите "На экран Домой". Работает как обычное приложение!
+                  Часто обращаетесь за советом? Добавьте Оракула <strong>на экран «Домой»</strong> вашего телефона. На iPhone нажмите три точки, прокрутите вниз и выберите «На экран Домой» (или «Добавить ярлык»). На Android — меню (три точки), затем выберите «На экран Домой».
                 </div>
               </div>
             </div>
@@ -374,6 +375,15 @@ const App: React.FC = () => {
                             <Coffee className="w-4 h-4" /> Telegram (Мир)
                           </a>
                         </div>
+                      </>
+                    ) : apiError?.toLowerCase().includes('location') || apiError?.toLowerCase().includes('supported') ? (
+                      <>
+                        <p className="mb-4 font-serif text-lg text-red-100 text-left leading-relaxed">
+                          Ваше местоположение скрыто <strong>Серым Туманом</strong> (блокировка сервисов Google в вашем регионе).
+                        </p>
+                        <p className="mb-4 text-sm text-red-200/90 text-left bg-red-900/20 p-4 rounded border border-red-900/40">
+                          Пожалуйста, <strong>включите VPN</strong> (например, Нидерланды, Германия или любая другая страна Европы), чтобы Оракул смог с вами связаться, и попробуйте снова.
+                        </p>
                       </>
                     ) : (
                       <>
