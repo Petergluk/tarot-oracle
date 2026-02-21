@@ -31,10 +31,12 @@ app.use(
 
       // Если на сервере есть ключи, подставляем один из них
       if (API_KEYS.length > 0) {
-        const key = API_KEYS[currentKeyIndex];
-        const url = new URL(proxyReq.path, 'https://generativelanguage.googleapis.com');
-        url.searchParams.set('key', key);
-        proxyReq.path = url.pathname + url.search;
+        proxyReq.setHeader('x-goog-api-key', API_KEYS[currentKeyIndex]);
+      }
+    },
+    onProxyRes: (proxyRes, req, res) => {
+      if (proxyRes.statusCode !== 200) {
+        console.error(`[Proxy] Google API Error Code: ${proxyRes.statusCode} on path ${req.url}`);
       }
     },
     onError: (err, req, res) => {
