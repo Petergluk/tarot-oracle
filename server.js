@@ -19,6 +19,24 @@ const API_KEYS = (process.env.GEMINI_API_KEYS || process.env.VITE_API_KEYS || pr
 
 let currentKeyIndex = 0;
 
+// --- Simple in-memory statistics ---
+const stats = {
+  startedAt: new Date().toISOString(),
+  totalVisitors: 0,
+  uniqueIPs: new Set(),
+  totalQuestions: 0,
+  todayQuestions: 0,
+  todayDate: new Date().toISOString().slice(0, 10),
+};
+
+const resetDayIfNeeded = () => {
+  const today = new Date().toISOString().slice(0, 10);
+  if (today !== stats.todayDate) {
+    stats.todayDate = today;
+    stats.todayQuestions = 0;
+  }
+};
+
 console.log(`[Proxy] Server starting. API keys available: ${API_KEYS.length}`);
 
 // Proxy for Google Generative AI API
@@ -46,6 +64,14 @@ app.use('/google-api', createProxyMiddleware({
       const key = API_KEYS[currentKeyIndex % API_KEYS.length];
       proxyReq.setHeader('x-goog-api-key', key);
       currentKeyIndex++;
+
+      // Track question stats (generateContent = a real question)
+      if (req.url.includes('generateContent')) {
+        resetDayIfNeeded();
+        stats.totalQuestions++;
+        stats.todayQuestions++;
+      }
+
       console.log(`[Proxy] Forwarding request using key index ${(currentKeyIndex - 1) % API_KEYS.length}`);
     } else {
       console.error('[Proxy] WARNING: No API keys configured! Set GEMINI_API_KEYS env variable on Render.');
@@ -56,6 +82,30 @@ app.use('/google-api', createProxyMiddleware({
     res.status(502).json({ error: { message: 'Proxy connection to Google API failed', details: err.message } });
   }
 }));
+
+// --- Stats endpoint ---
+app.get('/api/stats', (req, res) => {
+  resetDayIfNeeded();
+  res.json({
+    startedAt: stats.startedAt,
+    totalVisitors: stats.totalVisitors,
+    uniqueVisitors: stats.uniqueIPs.size,
+    totalQuestions: stats.totalQuestions,
+    todayQuestions: stats.todayQuestions,
+    todayDate: stats.todayDate,
+    uptime: Math.round(process.uptime()) + 's'
+  });
+});
+
+// --- Visitor counter middleware (before static files) ---
+app.use((req, res, next) => {
+  if (req.path === '/' || req.path === '/index.html') {
+    stats.totalVisitors++;
+    const ip = req.headers['x-forwarded-for'] || req.ip || 'unknown';
+    stats.uniqueIPs.add(ip);
+  }
+  next();
+});
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.static(path.join(__dirname, 'dist')));

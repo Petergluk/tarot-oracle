@@ -9,6 +9,14 @@ export interface AIConfig {
   model?: string;
 }
 
+// Retry helper: retries on 503/429 with exponential backoff
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+const isRetryableError = (e: any): boolean => {
+  const msg = (e?.message || '').toLowerCase();
+  return msg.includes('503') || msg.includes('429') || msg.includes('unavailable') || msg.includes('high demand') || msg.includes('quota');
+};
+
 /**
  * Определяем базовый URL.
  * На хостинге (не google/localhost) отправляем запросы через серверный прокси /google-api
@@ -74,33 +82,40 @@ export const selectBestSpread = async (
   const prompt = `You are a Master Tarot Reader. Question: "${question}". Return ONLY the JSON with the selected spreadId from this list: ${JSON.stringify(spreadOptions)}. Result format: {"spreadId": "id"}`;
 
   for (const apiKey of keys) {
-    try {
-      const ai = new GoogleGenAI({
-        apiKey,
-        httpOptions: { baseUrl: getBaseUrl() }
-      });
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const ai = new GoogleGenAI({
+          apiKey,
+          httpOptions: { baseUrl: getBaseUrl() }
+        });
 
-      const response = await ai.models.generateContent({
-        model: config?.model || "gemini-3-flash-preview",
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              spreadId: { type: Type.STRING },
-            },
-            required: ["spreadId"]
+        const response = await ai.models.generateContent({
+          model: config?.model || "gemini-3-flash-preview",
+          contents: prompt,
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                spreadId: { type: Type.STRING },
+              },
+              required: ["spreadId"]
+            }
           }
-        }
-      });
+        });
 
-      const cleanText = (response.text || "{}").replace(/```json/gi, '').replace(/```/g, '').trim();
-      const result = JSON.parse(cleanText);
-      return result.spreadId || "three_card_classic";
-    } catch (e) {
-      console.warn(`Attempt failed, trying next key...`, e);
-      continue;
+        const cleanText = (response.text || "{}").replace(/```json/gi, '').replace(/```/g, '').trim();
+        const result = JSON.parse(cleanText);
+        return result.spreadId || "three_card_classic";
+      } catch (e: any) {
+        if (isRetryableError(e) && attempt < 2) {
+          console.warn(`[Spread] 503/429 on attempt ${attempt + 1}, retrying in ${(attempt + 1) * 2}s...`);
+          await sleep((attempt + 1) * 2000);
+          continue;
+        }
+        console.warn(`[Spread] Attempt failed:`, e.message);
+        break; // try next key
+      }
     }
   }
 
@@ -142,26 +157,34 @@ export const getTarotReading = async (
   let lastError = "";
 
   for (const apiKey of keys) {
-    try {
-      const ai = new GoogleGenAI({
-        apiKey,
-        httpOptions: { baseUrl: getBaseUrl() }
-      });
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const ai = new GoogleGenAI({
+          apiKey,
+          httpOptions: { baseUrl: getBaseUrl() }
+        });
 
-      const response = await ai.models.generateContent({
-        model: config?.model || "gemini-3-flash-preview",
-        contents: prompt,
-        config: {
-          temperature: config?.temperature ?? 1.1,
-          systemInstruction: config?.systemPrompt || DEFAULT_SYSTEM_PROMPT
+        const response = await ai.models.generateContent({
+          model: config?.model || "gemini-3-flash-preview",
+          contents: prompt,
+          config: {
+            temperature: config?.temperature ?? 1.1,
+            systemInstruction: config?.systemPrompt || DEFAULT_SYSTEM_PROMPT
+          }
+        });
+
+        if (response.text) return response.text;
+      } catch (e: any) {
+        lastError = e.message || "Unknown Error";
+
+        if (isRetryableError(e) && attempt < 2) {
+          console.warn(`[Reading] 503/429 on attempt ${attempt + 1}, retrying in ${(attempt + 1) * 2}s...`);
+          await sleep((attempt + 1) * 2000);
+          continue;
         }
-      });
-
-      if (response.text) return response.text;
-    } catch (e: any) {
-      lastError = e.message || "Unknown Error";
-      console.error(`Attempt failed: ${lastError}`);
-      continue;
+        console.error(`[Reading] Attempt failed: ${lastError}`);
+        break; // try next key
+      }
     }
   }
 
