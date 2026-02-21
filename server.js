@@ -1,6 +1,6 @@
 
 import express from 'express';
-import { createProxyMiddleware, fixRequestBody } from 'http-proxy-middleware';
+import { createProxyMiddleware } from 'http-proxy-middleware';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -14,9 +14,6 @@ const PORT = process.env.PORT || 3000;
 const API_KEYS = (process.env.VITE_API_KEYS || process.env.API_KEY || '').split(',').map(k => k.trim()).filter(Boolean);
 let currentKeyIndex = 0;
 
-// Обязательно восстанавливаем парсинг JSON для наших собственных роутов, если они появятся
-app.use(express.json());
-
 // Прокси для Google API
 // Это позволяет делать запросы от имени сервера (из США/Европы), обходя блокировки
 app.use(
@@ -28,10 +25,6 @@ app.use(
       '^/google-api': '',
     },
     onProxyReq: (proxyReq, req, res) => {
-      // Это критически важно: если body был распарсен через express.json(), 
-      // его нужно "вернуть" обратно в поток для прокси
-      fixRequestBody(proxyReq, req);
-
       // Скрываем реальный IP-адрес клиента для безопасности и обхода региональных блокировок
       proxyReq.removeHeader('x-forwarded-for');
       proxyReq.removeHeader('x-forwarded-host');
