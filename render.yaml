@@ -1,9 +1,10 @@
-
 services:
   - type: web
-    name: tarot-oracle
+    name: mystic-tarot-proxy
     runtime: node
-    buildCommand: npm install && npm run build 
+    branch: proxy-anonymous
+    plan: free
+    buildCommand: npm install && npm run build
     startCommand: npm start
     envVars:
       - key: VITE_API_KEYS
