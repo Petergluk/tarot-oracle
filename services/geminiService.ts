@@ -82,8 +82,12 @@ export const selectBestSpread = async (
       const cleanText = (response.text || "{}").replace(/```json/gi, '').replace(/```/g, '').trim();
       const result = JSON.parse(cleanText);
       return result.spreadId || "three_card_classic";
-    } catch (e) {
-      console.warn(`Attempt failed, trying next key...`, e);
+    } catch (e: any) {
+      console.warn(`Attempt failed:`, e.message);
+      if (e.message?.includes('JSON')) {
+        // The SDK throws JSON parse errors when Google's CDN blocks the connection (e.g. region lock) and returns HTML/empty body instead of JSON.
+        console.error("Intercepted likely Location Block error (Empty/HTML response parsed as JSON).");
+      }
       continue;
     }
   }
@@ -145,6 +149,12 @@ export const getTarotReading = async (
     } catch (e: any) {
       lastError = e.message || "Unknown Error";
       console.error(`Attempt failed: ${lastError}`);
+
+      if (lastError.includes('JSON')) {
+        // The SDK throws JSON parse errors when Google's CDN blocks the connection (e.g. region lock) and returns HTML/empty body instead of JSON.
+        lastError = "Location is not supported (Empty JSON response)";
+      }
+
       continue;
     }
   }
