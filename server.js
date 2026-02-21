@@ -14,64 +14,44 @@ const PORT = process.env.PORT || 3000;
 const API_KEYS = (process.env.VITE_API_KEYS || process.env.API_KEY || '').split(',').map(k => k.trim()).filter(Boolean);
 let currentKeyIndex = 0;
 
-// Прокси для Google API (Нативная реализация для обхода проблем с потоками на Render)
-app.use('/google-api', express.json({ limit: '10mb' }), (req, res) => {
-  const targetHost = 'generativelanguage.googleapis.com';
+import { createProxyMiddleware, fixRequestBody } from 'http-proxy-middleware';
 
-  // Убираем возможный фейковый ключ клиента из URL
-  const urlPath = req.url.replace(/([?&])key=[^&]+(&|$)/, '$1').replace(/&$/, '').replace(/\?$/, '');
+// Прокси для Google API через надежный http-proxy-middleware
+app.use('/google-api', createProxyMiddleware({
+  target: 'https://generativelanguage.googleapis.com',
+  changeOrigin: true,
+  pathRewrite: (path, req) => {
+    // Убираем возможный фейковый ключ клиента из URL
+    const cleanPath = path.replace(/^\/google-api/, '').replace(/([?&])key=[^&]+(&|$)/, '$1').replace(/&$/, '').replace(/\?$/, '');
 
-  const options = {
-    hostname: targetHost,
-    port: 443,
-    path: urlPath,
-    method: req.method,
-    headers: {
-      'Content-Type': 'application/json'
+    if (API_KEYS.length > 0) {
+      const url = new URL(cleanPath, 'https://generativelanguage.googleapis.com');
+      url.searchParams.set('key', API_KEYS[currentKeyIndex]);
+      return url.pathname + url.search;
     }
-  };
+    return cleanPath;
+  },
+  onProxyReq: (proxyReq, req, res) => {
+    // Скрываем реальный IP-адрес клиента для безопасности
+    proxyReq.removeHeader('x-forwarded-for');
+    proxyReq.removeHeader('x-forwarded-host');
 
-  if (API_KEYS.length > 0) {
-    options.headers['x-goog-api-key'] = API_KEYS[currentKeyIndex];
-  } else if (req.headers['x-goog-api-key']) {
-    options.headers['x-goog-api-key'] = req.headers['x-goog-api-key'];
-  }
-
-  let bodyStr;
-  if (req.body && Object.keys(req.body).length > 0) {
-    bodyStr = JSON.stringify(req.body);
-    options.headers['Content-Length'] = Buffer.byteLength(bodyStr);
-  }
-
-  const proxyReq = https.request(options, (proxyRes) => {
-    res.status(proxyRes.statusCode);
-
-    ['content-type', 'content-encoding'].forEach(header => {
-      if (proxyRes.headers[header]) {
-        res.setHeader(header, proxyRes.headers[header]);
-      }
-    });
-
-    if (proxyRes.statusCode !== 200) {
-      console.error(`[Manual Proxy] Error Code: ${proxyRes.statusCode} on path ${urlPath}`);
+    if (API_KEYS.length > 0) {
+      proxyReq.setHeader('x-goog-api-key', API_KEYS[currentKeyIndex]);
+    } else if (req.headers['x-goog-api-key']) {
+      proxyReq.setHeader('x-goog-api-key', req.headers['x-goog-api-key']);
     }
 
-    proxyRes.pipe(res);
-  });
-
-  proxyReq.on('error', (err) => {
-    console.error('[Manual Proxy] Network Error:', err);
-    if (!res.headersSent) {
-      res.status(500).json({ error: { message: 'Ошибка связи с серверами Google' } });
+    // Если express.json используется глобально, чиним тело запроса
+    if (req.body && Object.keys(req.body).length > 0) {
+      fixRequestBody(proxyReq, req);
     }
-  });
-
-  if (bodyStr) {
-    proxyReq.write(bodyStr);
+  },
+  onError: (err, req, res) => {
+    console.error('[HPM Error]', err);
+    res.status(500).json({ error: { message: 'Ошибка связи с серверами Google через прокси' } });
   }
-
-  proxyReq.end();
-});
+}));
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.static(path.join(__dirname, 'dist')));
