@@ -21,15 +21,18 @@ const getBaseUrl = () => {
 const getAllApiKeys = (): string[] => {
   // @ts-ignore
   const env = import.meta.env || {};
-  const rawValue = env.VITE_API_KEYS || env.VITE_API_KEY || (typeof process !== 'undefined' ? process.env.API_KEY : null);
+  // Vite injects these at build time. Render strings could be malformed.
+  const rawValue = env.VITE_API_KEYS || env.VITE_API_KEY || '';
 
   if (!rawValue) {
-    // Если мы на хостинге, прокси сам добавит ключ, но SDK хочет непустую строку
-    if (getBaseUrl()) return ["SERVER_SIDE_KEY"];
     return [];
   }
 
-  return rawValue.split(',').map((k: string) => k.trim()).filter((k: string) => k.length > 0);
+  // Handle both comma-separated and space-separated keys, avoiding empty strings
+  return rawValue
+    .split(/[,;|\s]+/)
+    .map((k: string) => k.trim())
+    .filter((k: string) => k.length > 5); // Real API keys are long
 };
 
 export const DEFAULT_SYSTEM_PROMPT = `Ты великий мудрец и оракул. Ты видишь нити времени сплетающиеся в узорах судеб. 
@@ -103,7 +106,7 @@ export const getTarotReading = async (
 ): Promise<string> => {
   const keys = getAllApiKeys();
   if (keys.length === 0) {
-    throw new Error("API ключи не найдены.");
+    throw new Error("КРИТИЧЕСКАЯ ОШИБКА: API ключи не вшиты в сборку. Проверьте переменные окружения VITE_API_KEYS на сервере Render.");
   }
 
   let cardDescription = "";
