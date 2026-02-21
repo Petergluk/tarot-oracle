@@ -37,10 +37,16 @@ app.use('/google-api', express.json({ limit: '10mb' }), (req, res) => {
     options.headers['x-goog-api-key'] = req.headers['x-goog-api-key'];
   }
 
+  let bodyStr;
+  if (req.body && Object.keys(req.body).length > 0) {
+    bodyStr = JSON.stringify(req.body);
+    options.headers['Content-Length'] = Buffer.byteLength(bodyStr);
+  }
+
   const proxyReq = https.request(options, (proxyRes) => {
     res.status(proxyRes.statusCode);
 
-    ['content-type', 'content-length', 'transfer-encoding', 'content-encoding'].forEach(header => {
+    ['content-type', 'content-encoding'].forEach(header => {
       if (proxyRes.headers[header]) {
         res.setHeader(header, proxyRes.headers[header]);
       }
@@ -60,8 +66,8 @@ app.use('/google-api', express.json({ limit: '10mb' }), (req, res) => {
     }
   });
 
-  if (req.body && Object.keys(req.body).length > 0) {
-    proxyReq.write(JSON.stringify(req.body));
+  if (bodyStr) {
+    proxyReq.write(bodyStr);
   }
 
   proxyReq.end();
