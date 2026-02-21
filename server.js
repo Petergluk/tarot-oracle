@@ -35,27 +35,25 @@ app.use('/google-api', createProxyMiddleware({
       .replace(/&$/, '')
       .replace(/\?$/, '');
   },
-  on: {
-    proxyReq: (proxyReq, req) => {
-      // Strip client IP for anonymity
-      proxyReq.removeHeader('x-forwarded-for');
-      proxyReq.removeHeader('x-forwarded-host');
-      proxyReq.removeHeader('x-real-ip');
+  onProxyReq: (proxyReq, req) => {
+    // Strip client IP for anonymity
+    proxyReq.removeHeader('x-forwarded-for');
+    proxyReq.removeHeader('x-forwarded-host');
+    proxyReq.removeHeader('x-real-ip');
 
-      // Inject server-side API key via header (preferred method, no key in URL)
-      if (API_KEYS.length > 0) {
-        const key = API_KEYS[currentKeyIndex % API_KEYS.length];
-        proxyReq.setHeader('x-goog-api-key', key);
-        currentKeyIndex++;
-        console.log(`[Proxy] Forwarding request using key index ${(currentKeyIndex - 1) % API_KEYS.length}`);
-      } else {
-        console.error('[Proxy] WARNING: No API keys configured! Set GEMINI_API_KEYS env variable on Render.');
-      }
-    },
-    error: (err, req, res) => {
-      console.error('[Proxy] Error:', err.message);
-      res.status(502).json({ error: { message: 'Proxy connection to Google API failed', details: err.message } });
+    // Inject server-side API key via header (preferred method, no key in URL)
+    if (API_KEYS.length > 0) {
+      const key = API_KEYS[currentKeyIndex % API_KEYS.length];
+      proxyReq.setHeader('x-goog-api-key', key);
+      currentKeyIndex++;
+      console.log(`[Proxy] Forwarding request using key index ${(currentKeyIndex - 1) % API_KEYS.length}`);
+    } else {
+      console.error('[Proxy] WARNING: No API keys configured! Set GEMINI_API_KEYS env variable on Render.');
     }
+  },
+  onError: (err, req, res) => {
+    console.error('[Proxy] Error:', err.message);
+    res.status(502).json({ error: { message: 'Proxy connection to Google API failed', details: err.message } });
   }
 }));
 
