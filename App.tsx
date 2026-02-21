@@ -347,17 +347,50 @@ const App: React.FC = () => {
                       <AlertCircle className="w-5 h-5" />
                       Связь прервана
                     </div>
-                    <p className="mb-4 font-serif text-lg text-red-100 text-left leading-relaxed">
-                      Извините, но похоже все на сегодня, <strong>Оракул ушел спать.</strong>
-                    </p>
-                    <p className="mb-4 text-sm text-red-200/60 text-left">
-                      (Произошла ошибка при обращении к нейронным сетям. Возможно, исчерпан лимит бесплатных запросов к API).
-                    </p>
-                    <div className="bg-black/40 p-3 rounded font-mono text-[10px] text-red-500/70 break-all border border-red-900/20 text-left cursor-text select-text">
+
+                    {apiError?.toLowerCase().includes('429') || apiError?.toLowerCase().includes('quota') || apiError?.toLowerCase().includes('все попытки') ? (
+                      <>
+                        <p className="mb-4 font-serif text-lg text-red-100 text-left leading-relaxed">
+                          Сегодня Оракул ответил на множество вопросов, и <strong>лимит API исчерпан. Мудрецу тоже надо спать...</strong>
+                        </p>
+                        <p className="mb-6 text-sm text-red-200/90 text-left bg-red-900/20 p-4 rounded border border-red-900/40">
+                          Вы можете поддержать мотивацию автора развивать приложение (и оплачивать серверы без лимитов), угостив Оракула кофе! ☕️
+                        </p>
+                        <div className="flex flex-col sm:flex-row gap-3 mb-6">
+                          <a
+                            href="https://pay.cloudtips.ru/p/012f0b15"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-1 flex items-center justify-center gap-2 py-3 px-4 bg-[#ff8a00]/10 border border-[#ff8a00]/30 hover:bg-[#ff8a00]/20 text-[#ff8a00] font-bold uppercase tracking-widest text-xs rounded transition-colors"
+                          >
+                            <Coffee className="w-4 h-4" /> CloudTips (РФ)
+                          </a>
+                          <a
+                            href="https://t.me/tribute/app?startapp=dsA1"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-1 flex items-center justify-center gap-2 py-3 px-4 bg-[#2AABEE]/10 border border-[#2AABEE]/30 hover:bg-[#2AABEE]/20 text-[#2AABEE] font-bold uppercase tracking-widest text-xs rounded transition-colors"
+                          >
+                            <Coffee className="w-4 h-4" /> Telegram (Мир)
+                          </a>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <p className="mb-4 font-serif text-lg text-red-100 text-left leading-relaxed">
+                          Связь с тонкими мирами прервалась...
+                        </p>
+                        <p className="mb-4 text-sm text-red-200/60 text-left">
+                          (Произошла техническая ошибка. Возможно, сервер временно недоступен или обновляется).
+                        </p>
+                      </>
+                    )}
+
+                    <div className="bg-black/40 p-3 rounded font-mono text-[10px] text-red-500/70 break-all border border-red-900/20 text-left cursor-text select-text mt-4">
                       {apiError}
                     </div>
                     <button onClick={resetApp} className="mt-8 w-full py-4 bg-red-900/20 border border-red-900/40 hover:bg-red-900/40 transition text-red-100 uppercase tracking-widest text-xs font-bold rounded">
-                      Попробовать снова
+                      Вернуться на главную
                     </button>
                   </div>
                 ) : (

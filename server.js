@@ -29,14 +29,23 @@ app.use(
       proxyReq.removeHeader('x-forwarded-for');
       proxyReq.removeHeader('x-forwarded-host');
 
-      // Если на сервере есть ключи, подставляем один из них
+      // Если на сервере есть ключи, удаляем возможно переданный фейковый ключ клиента
+      // и подставляем настоящий ключ через заголовок
       if (API_KEYS.length > 0) {
         proxyReq.setHeader('x-goog-api-key', API_KEYS[currentKeyIndex]);
+        const urlStr = proxyReq.path;
+        if (urlStr.includes('?key=') || urlStr.includes('&key=')) {
+          // убираем параметр key из пути
+          const newPath = urlStr.replace(/([?&])key=[^&]+(&|$)/, '$1').replace(/&$/, '').replace(/\?$/, '');
+          proxyReq.path = newPath;
+        }
       }
     },
     onProxyRes: (proxyRes, req, res) => {
+      // Логгируем ошибки Google API
       if (proxyRes.statusCode !== 200) {
-        console.error(`[Proxy] Google API Error Code: ${proxyRes.statusCode} on path ${req.url}`);
+        console.error(`[Proxy] Error Code: ${proxyRes.statusCode} on path ${req.url}`);
+        // Позволим пробросить тело ответа клиенту, чтобы клиентский SDK распарсил ошибку
       }
     },
     onError: (err, req, res) => {
