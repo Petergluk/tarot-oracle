@@ -1,6 +1,6 @@
 
 import express from 'express';
-import { createProxyMiddleware } from 'http-proxy-middleware';
+import https from 'https';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -14,46 +14,58 @@ const PORT = process.env.PORT || 3000;
 const API_KEYS = (process.env.VITE_API_KEYS || process.env.API_KEY || '').split(',').map(k => k.trim()).filter(Boolean);
 let currentKeyIndex = 0;
 
-// Прокси для Google API
-// Это позволяет делать запросы от имени сервера (из США/Европы), обходя блокировки
-app.use(
-  '/google-api',
-  createProxyMiddleware({
-    target: 'https://generativelanguage.googleapis.com',
-    changeOrigin: true,
-    pathRewrite: {
-      '^/google-api': '',
-    },
-    onProxyReq: (proxyReq, req, res) => {
-      // Скрываем реальный IP-адрес клиента для безопасности и обхода региональных блокировок
-      proxyReq.removeHeader('x-forwarded-for');
-      proxyReq.removeHeader('x-forwarded-host');
+// Прокси для Google API (Нативная реализация для обхода проблем с потоками на Render)
+app.use('/google-api', express.json({ limit: '10mb' }), (req, res) => {
+  const targetHost = 'generativelanguage.googleapis.com';
 
-      // Если на сервере есть ключи, удаляем возможно переданный фейковый ключ клиента
-      // и подставляем настоящий ключ через заголовок
-      if (API_KEYS.length > 0) {
-        proxyReq.setHeader('x-goog-api-key', API_KEYS[currentKeyIndex]);
-        const urlStr = proxyReq.path;
-        if (urlStr.includes('?key=') || urlStr.includes('&key=')) {
-          // убираем параметр key из пути
-          const newPath = urlStr.replace(/([?&])key=[^&]+(&|$)/, '$1').replace(/&$/, '').replace(/\?$/, '');
-          proxyReq.path = newPath;
-        }
-      }
-    },
-    onProxyRes: (proxyRes, req, res) => {
-      // Логгируем ошибки Google API
-      if (proxyRes.statusCode !== 200) {
-        console.error(`[Proxy] Error Code: ${proxyRes.statusCode} on path ${req.url}`);
-        // Позволим пробросить тело ответа клиенту, чтобы клиентский SDK распарсил ошибку
-      }
-    },
-    onError: (err, req, res) => {
-      console.error('Proxy Error:', err);
-      res.status(500).send('Ошибка связи с Оракулом через сервер');
+  // Убираем возможный фейковый ключ клиента из URL
+  const urlPath = req.url.replace(/([?&])key=[^&]+(&|$)/, '$1').replace(/&$/, '').replace(/\?$/, '');
+
+  const options = {
+    hostname: targetHost,
+    port: 443,
+    path: urlPath,
+    method: req.method,
+    headers: {
+      'Content-Type': 'application/json'
     }
-  })
-);
+  };
+
+  if (API_KEYS.length > 0) {
+    options.headers['x-goog-api-key'] = API_KEYS[currentKeyIndex];
+  } else if (req.headers['x-goog-api-key']) {
+    options.headers['x-goog-api-key'] = req.headers['x-goog-api-key'];
+  }
+
+  const proxyReq = https.request(options, (proxyRes) => {
+    res.status(proxyRes.statusCode);
+
+    ['content-type', 'content-length', 'transfer-encoding', 'content-encoding'].forEach(header => {
+      if (proxyRes.headers[header]) {
+        res.setHeader(header, proxyRes.headers[header]);
+      }
+    });
+
+    if (proxyRes.statusCode !== 200) {
+      console.error(`[Manual Proxy] Error Code: ${proxyRes.statusCode} on path ${urlPath}`);
+    }
+
+    proxyRes.pipe(res);
+  });
+
+  proxyReq.on('error', (err) => {
+    console.error('[Manual Proxy] Network Error:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: { message: 'Ошибка связи с серверами Google' } });
+    }
+  });
+
+  if (req.body && Object.keys(req.body).length > 0) {
+    proxyReq.write(JSON.stringify(req.body));
+  }
+
+  proxyReq.end();
+});
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.static(path.join(__dirname, 'dist')));
