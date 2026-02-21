@@ -15,14 +15,7 @@ export interface AIConfig {
  * На хостинге используем локальный прокси /google-api.
  */
 const getBaseUrl = () => {
-  if (typeof window !== 'undefined') {
-    const host = window.location.hostname;
-    if (host.includes('aistudio') || host.includes('google')) {
-      return undefined; // Напрямую
-    }
-    return window.location.origin + '/google-api'; // Через прокси
-  }
-  return undefined;
+  return undefined; // Direct call
 };
 
 const getAllApiKeys = (): string[] => {
