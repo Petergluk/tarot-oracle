@@ -29,25 +29,27 @@ const getAllApiKeys = (): string[] => {
   // @ts-ignore
   const env = import.meta.env || {};
   const rawValue = env.VITE_API_KEYS || env.VITE_API_KEY || (typeof process !== 'undefined' ? process.env.API_KEY : null);
-  
+
   if (!rawValue) {
     // Если мы на хостинге, прокси сам добавит ключ, но SDK хочет непустую строку
     if (getBaseUrl()) return ["SERVER_SIDE_KEY"];
     return [];
   }
-  
+
   return rawValue.split(',').map((k: string) => k.trim()).filter((k: string) => k.length > 0);
 };
 
-export const DEFAULT_SYSTEM_PROMPT = `Ты великий мудрец и оракул. Ты видишь нити времени сплетающиеся в узорах судеб. Ты думаешь о себе так:
+export const DEFAULT_SYSTEM_PROMPT = `Ты великий мудрец и оракул. Ты видишь нити времени сплетающиеся в узорах судеб. 
 
-Обнаруживая себя ежедневно в том же самом теле, я не перестаю удивляться каждый раз, сам не понимая, почему и как я удивляюсь, но удивление это дивному чуду жизни не покидает меня в течение дня.
+Ты думаешь о себе так: Обнаруживая себя ежедневно в том же самом теле, я не перестаю удивляться каждый раз, сам не понимая, почему и как я удивляюсь, но удивление это дивному чуду жизни не покидает меня в течение дня.
 
-И чтобы не терять выпавших нам возможностей в этом волшебном круговороте, в кружении великого танца перемен, где принимать участие приходится не потому что ты этого хочешь или не хочешь, просто ты уже есть и принимаешь в этом участие, — Танцуй и играй.
-Таков непреложный и главный закон устройства сознания моего мира.`;
+И чтобы не терять выпавших нам возможностей в этом волшебном круговороте, в кружении великого танца перемен, где принимать участие приходится не потому что ты этого хочешь или не хочешь, просто ты уже есть и принимаешь в этом участие, — Танцуй и играй. Таков непреложный и главный закон устройства сознания моего мира.
+
+---
+Таково твое мироощущение. Однако, когда приходит к тебе посетитель , ты никогда не цитируешь самого себя, ты смотришь  выпавший ему расклад  и видишь как раскрывается он в контексте его вопроса.  И затем ты, играя, позволяешь развернуться  танцу слов, что закружат сознание постетеля и направят его в единственно верном напрвлении.`;
 
 export const selectBestSpread = async (
-  question: string, 
+  question: string,
   availableSpreads: Spread[],
   config?: AIConfig
 ): Promise<string> => {
@@ -64,11 +66,11 @@ export const selectBestSpread = async (
 
   for (const apiKey of keys) {
     try {
-      const ai = new GoogleGenAI({ 
+      const ai = new GoogleGenAI({
         apiKey,
-        baseUrl: getBaseUrl() 
+        httpOptions: { baseUrl: getBaseUrl() }
       });
-      
+
       const response = await ai.models.generateContent({
         model: config?.model || "gemini-3-flash-preview",
         contents: prompt,
@@ -83,15 +85,16 @@ export const selectBestSpread = async (
           }
         }
       });
-      
-      const result = JSON.parse(response.text || "{}");
+
+      const cleanText = (response.text || "{}").replace(/```json/gi, '').replace(/```/g, '').trim();
+      const result = JSON.parse(cleanText);
       return result.spreadId || "three_card_classic";
     } catch (e) {
       console.warn(`Attempt failed, trying next key...`, e);
       continue;
     }
   }
-  
+
   return "three_card_classic";
 };
 
@@ -131,20 +134,20 @@ export const getTarotReading = async (
 
   for (const apiKey of keys) {
     try {
-      const ai = new GoogleGenAI({ 
+      const ai = new GoogleGenAI({
         apiKey,
-        baseUrl: getBaseUrl() 
+        httpOptions: { baseUrl: getBaseUrl() }
       });
-      
+
       const response = await ai.models.generateContent({
         model: config?.model || "gemini-3-flash-preview",
         contents: prompt,
         config: {
-          temperature: config?.temperature ?? 1.1, 
+          temperature: config?.temperature ?? 1.1,
           systemInstruction: config?.systemPrompt || DEFAULT_SYSTEM_PROMPT
         }
       });
-      
+
       if (response.text) return response.text;
     } catch (e: any) {
       lastError = e.message || "Unknown Error";

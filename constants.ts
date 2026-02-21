@@ -62,7 +62,7 @@ const IMAGE_MAP: Record<string, string> = {
   // --- SWORDS (29-42) - Mixed naming convention ---
   'ace_of_swords': '29_ace_of_swords.jpg',
   'two_of_swords': '30_swords_two.jpg',         // Irregular
-  'three_of_swords': '31_swords_three_png.jpg', // Matches the filename in /public/cards/minor
+  'three_of_swords': '31_swords_three.jpg',
   'four_of_swords': '32_swords_four.jpg',       // Irregular
   'five_of_swords': '33_swords_five.jpg',       // Irregular
   'six_of_swords': '34_swords_six.jpg',         // Irregular
@@ -114,7 +114,7 @@ const generateMinorArcana = (suit: Suit, suitRu: string): TarotCard[] => {
 
   ranks.forEach((rank) => {
     const id = `${rank.name.toLowerCase()}_of_${suit.toLowerCase()}`;
-    
+
     // Explicitly use the map.
     const fileName = IMAGE_MAP[id] || `${id}.jpg`;
 
@@ -161,7 +161,7 @@ const majorArcanaData = [
 const majorArcanaCards: TarotCard[] = majorArcanaData.map((c) => {
   const id = `major_${c.id}`;
   const fileName = IMAGE_MAP[id] || `${id}.jpg`;
-  
+
   return {
     id: id,
     name: c.name,

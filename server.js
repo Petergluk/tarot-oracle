@@ -27,6 +27,10 @@ app.use(
       '^/google-api': '',
     },
     onProxyReq: (proxyReq, req, res) => {
+      // Скрываем реальный IP-адрес клиента для безопасности и обхода региональных блокировок
+      proxyReq.removeHeader('x-forwarded-for');
+      proxyReq.removeHeader('x-forwarded-host');
+
       // Если на сервере есть ключи, подставляем один из них
       if (API_KEYS.length > 0) {
         const key = API_KEYS[currentKeyIndex];
@@ -52,8 +56,8 @@ app.get('*', (req, res) => {
   const distIndex = path.join(__dirname, 'dist', 'index.html');
   res.sendFile(distIndex, (err) => {
     if (err) {
-       const publicIndex = path.join(__dirname, 'public', 'index.html');
-       res.sendFile(publicIndex);
+      const publicIndex = path.join(__dirname, 'public', 'index.html');
+      res.sendFile(publicIndex);
     }
   });
 });
