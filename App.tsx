@@ -13,43 +13,120 @@ import CardComponent from './components/CardComponent';
 
 type ExtendedAppState = AppState | 'consulting';
 
-const SettingsModal: React.FC<{ config: AIConfig; onConfigChange: (config: AIConfig) => void; onClose: () => void; }> = ({ config, onConfigChange, onClose }) => (
-  <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 font-sans text-left">
-    <div className="bg-slate-900 border border-slate-700 w-full max-w-lg p-6 rounded-lg shadow-2xl animate-fade-in relative max-h-[90vh] overflow-y-auto">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-2 text-amber-500">
-          <Settings className="w-5 h-5" />
-          <h2 className="font-serif text-xl tracking-wide">Настройки Оракула</h2>
+const SettingsModal: React.FC<{ config: AIConfig; onConfigChange: (config: AIConfig) => void; onClose: () => void; }> = ({ config, onConfigChange, onClose }) => {
+  const [activeTab, setActiveTab] = useState<'settings' | 'stats'>('settings');
+  const [stats, setStats] = useState<any>(null);
+  const [loadingStats, setLoadingStats] = useState(false);
+
+  React.useEffect(() => {
+    if (activeTab === 'stats') {
+      setLoadingStats(true);
+      fetch('/api/stats')
+        .then(res => res.json())
+        .then(data => {
+          setStats(data);
+          setLoadingStats(false);
+        })
+        .catch(err => {
+          console.error("Failed to load stats:", err);
+          setLoadingStats(false);
+        });
+    }
+  }, [activeTab]);
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 font-sans text-left">
+      <div className="bg-slate-900 border border-slate-700 w-full max-w-lg p-6 rounded-lg shadow-2xl animate-fade-in relative max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2 text-amber-500">
+            <Settings className="w-5 h-5" />
+            <h2 className="font-serif text-xl tracking-wide">Система</h2>
+          </div>
+          <button onClick={onClose} className="text-slate-500 hover:text-white transition"><X className="w-6 h-6" /></button>
         </div>
-        <button onClick={onClose} className="text-slate-500 hover:text-white transition"><X className="w-6 h-6" /></button>
-      </div>
-      <div className="space-y-6">
-        <div className="space-y-2">
-          <label className="text-xs uppercase text-slate-400 tracking-widest font-bold">Модель AI</label>
-          <select value={config.model} onChange={(e) => onConfigChange({ ...config, model: e.target.value })} className="w-full bg-slate-950 border border-slate-700 text-slate-200 p-2 text-sm rounded focus:border-amber-500 outline-none">
-            <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
-            <option value="gemini-flash-lite-latest">Gemini Flash Lite</option>
-            <option value="gemini-3-pro-preview">Gemini 3 Pro</option>
-          </select>
+
+        {/* Tabs */}
+        <div className="flex border-b border-slate-800 mb-6 font-bold uppercase tracking-widest text-xs">
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`flex-1 pb-3 text-center transition-colors ${activeTab === 'settings' ? 'text-amber-500 border-b-2 border-amber-500' : 'text-slate-500 hover:text-slate-300'}`}
+          >
+            Настройки ИИ
+          </button>
+          <button
+            onClick={() => setActiveTab('stats')}
+            className={`flex-1 pb-3 text-center transition-colors ${activeTab === 'stats' ? 'text-amber-500 border-b-2 border-amber-500' : 'text-slate-500 hover:text-slate-300'}`}
+          >
+            Статистика
+          </button>
         </div>
-        <div className="space-y-2">
-          <div className="flex justify-between text-xs uppercase text-slate-400 tracking-widest font-bold"><span>Температура</span><span className="text-amber-500">{config.temperature}</span></div>
-          <input type="range" min="0.1" max="2.0" step="0.1" value={config.temperature} onChange={(e) => onConfigChange({ ...config, temperature: parseFloat(e.target.value) })} className="w-full accent-amber-500 h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer" />
-        </div>
-        <div className="space-y-2">
-          <label className="text-xs uppercase text-slate-400 tracking-widest font-bold">Системный промпт</label>
-          <textarea
-            value={config.systemPrompt}
-            onChange={(e) => onConfigChange({ ...config, systemPrompt: e.target.value })}
-            className="w-full bg-slate-950 border border-slate-700 text-slate-200 p-3 text-sm rounded h-48 focus:border-amber-500 outline-none font-sans resize-none"
-            placeholder="Инструкции для ИИ..."
-          />
-        </div>
-        <button onClick={onClose} className="w-full py-3 bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold uppercase tracking-widest rounded transition-colors shadow-lg">Сохранить</button>
+
+        {activeTab === 'settings' && (
+          <div className="space-y-6 animate-fade-in">
+            <div className="space-y-2">
+              <label className="text-xs uppercase text-slate-400 tracking-widest font-bold">Модель AI</label>
+              <select value={config.model} onChange={(e) => onConfigChange({ ...config, model: e.target.value })} className="w-full bg-slate-950 border border-slate-700 text-slate-200 p-2 text-sm rounded focus:border-amber-500 outline-none">
+                <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
+                <option value="gemini-flash-lite-latest">Gemini Flash Lite</option>
+                <option value="gemini-3-pro-preview">Gemini 3 Pro</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between text-xs uppercase text-slate-400 tracking-widest font-bold"><span>Температура</span><span className="text-amber-500">{config.temperature}</span></div>
+              <input type="range" min="0.1" max="2.0" step="0.1" value={config.temperature} onChange={(e) => onConfigChange({ ...config, temperature: parseFloat(e.target.value) })} className="w-full accent-amber-500 h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs uppercase text-slate-400 tracking-widest font-bold">Системный промпт</label>
+              <textarea
+                value={config.systemPrompt}
+                onChange={(e) => onConfigChange({ ...config, systemPrompt: e.target.value })}
+                className="w-full bg-slate-950 border border-slate-700 text-slate-200 p-3 text-sm rounded h-48 focus:border-amber-500 outline-none font-sans resize-none"
+                placeholder="Инструкции для ИИ..."
+              />
+            </div>
+            <button onClick={onClose} className="w-full py-3 bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold uppercase tracking-widest rounded transition-colors shadow-lg">Сохранить</button>
+          </div>
+        )}
+
+        {activeTab === 'stats' && (
+          <div className="space-y-4 animate-fade-in text-slate-300">
+            {loadingStats ? (
+              <div className="flex justify-center items-center py-10">
+                <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
+              </div>
+            ) : !stats ? (
+              <div className="text-center py-10 text-slate-500 text-sm">Нет данных о статистике</div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-slate-950 p-4 border border-slate-800 rounded text-center">
+                  <div className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">Посетители (Всего)</div>
+                  <div className="text-3xl font-serif text-amber-500">{stats.totalVisitors}</div>
+                </div>
+                <div className="bg-slate-950 p-4 border border-slate-800 rounded text-center">
+                  <div className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">Вопросы (Всего)</div>
+                  <div className="text-3xl font-serif text-amber-500">{stats.totalQuestions}</div>
+                </div>
+                <div className="bg-slate-950 p-4 border border-slate-800 rounded text-center">
+                  <div className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">Уники ({stats.todayDate})</div>
+                  <div className="text-xl font-serif text-amber-400">{stats.uniqueVisitors}</div>
+                </div>
+                <div className="bg-slate-950 p-4 border border-slate-800 rounded text-center">
+                  <div className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">Вопросы ({stats.todayDate})</div>
+                  <div className="text-xl font-serif text-amber-400">{stats.todayQuestions}</div>
+                </div>
+
+                <div className="col-span-2 mt-4 pt-4 border-t border-slate-800 text-[10px] text-slate-500 uppercase tracking-widest flex justify-between">
+                  <span>База данных: {stats.db ? <span className="text-green-500">PostgreSQL</span> : <span className="text-amber-500">In-Memory</span>}</span>
+                  <span>Uptime: {stats.uptime}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 const InfoModal: React.FC<{ onClose: () => void; }> = ({ onClose }) => (
   <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 font-sans text-left">
