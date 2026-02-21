@@ -381,8 +381,8 @@ const App: React.FC = () => {
                         <p className="mb-4 font-serif text-lg text-red-100 text-left leading-relaxed">
                           Ваше местоположение скрыто <strong>Серым Туманом</strong> (блокировка сервисов Google в вашем регионе).
                         </p>
-                        <p className="mb-4 text-sm text-red-200/90 text-left bg-red-900/20 p-4 rounded border border-red-900/40">
-                          Пожалуйста, <strong>включите VPN</strong> (например, Нидерланды, Германия или любая другая страна Европы), чтобы Оракул смог с вами связаться, и попробуйте снова.
+                        <p className="mb-4 text-sm text-red-200/90 text-left bg-red-900/20 p-4 rounded border border-red-900/40 leading-relaxed">
+                          Пожалуйста, <strong>включите VPN</strong> (например, Нидерланды, Германия или любая другая страна Европы), чтобы Оракул смог с вами связаться, либо воспользуйтесь <a href="https://t-oracle.onrender.com/" target="_blank" rel="noopener noreferrer" className="text-amber-400 hover:text-amber-300 underline font-bold transition-colors">специальной версией без VPN</a>.
                         </p>
                       </>
                     ) : (
