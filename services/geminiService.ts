@@ -10,33 +10,42 @@ export interface AIConfig {
 }
 
 /**
- * Определяем базовый URL. 
- * В AI Studio (домен google) работаем напрямую.
- * На хостинге используем локальный прокси /google-api.
+ * Определяем базовый URL.
+ * На хостинге (не google/localhost) отправляем запросы через серверный прокси /google-api
+ * который подставит настоящий ключ из своей переменной окружения.
  */
 const getBaseUrl = () => {
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
-    if (host.includes('aistudio') || host.includes('google')) {
-      return undefined; // Напрямую
+    // AI Studio или localhost - работаем напрямую
+    if (host.includes('aistudio') || host.includes('google') || host === 'localhost' || host === '127.0.0.1') {
+      return undefined;
     }
-    return window.location.origin + '/google-api'; // Через прокси
+    // На деплой - через прокси
+    return window.location.origin + '/google-api';
   }
   return undefined;
 };
 
 const getAllApiKeys = (): string[] => {
-  // @ts-ignore
-  const env = import.meta.env || {};
-  const rawValue = env.VITE_API_KEYS || env.VITE_API_KEY || (typeof process !== 'undefined' ? process.env.API_KEY : null);
+  const baseUrl = getBaseUrl();
 
-  if (!rawValue) {
-    // Если мы на хостинге, прокси сам добавит ключ, но SDK хочет непустую строку
-    if (getBaseUrl()) return ["SERVER_SIDE_KEY"];
-    return [];
+  if (baseUrl) {
+    // Мы за прокси. Ключ SDK всё равно нужен (API не принимает пустой строку),
+    // а сервер в onProxyReq заменит его на настоящий ключ.
+    return ['proxy-placeholder'];
   }
 
-  return rawValue.split(',').map((k: string) => k.trim()).filter((k: string) => k.length > 0);
+  // Отладка локально: читаем ключи из .env
+  // @ts-ignore
+  const env = import.meta.env || {};
+  const rawValue = env.VITE_API_KEYS || env.VITE_API_KEY || '';
+  if (!rawValue) return [];
+
+  return rawValue
+    .split(',')
+    .map((k: string) => k.trim())
+    .filter((k: string) => k.length > 5);
 };
 
 export const DEFAULT_SYSTEM_PROMPT = `Ты великий мудрец и оракул. Ты видишь нити времени сплетающиеся в узорах судеб. 

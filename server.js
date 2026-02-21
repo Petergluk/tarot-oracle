@@ -1,8 +1,8 @@
-
+// All imports at the top (ES Module requirement)
 import express from 'express';
-import https from 'https';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { createProxyMiddleware } from 'http-proxy-middleware';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -10,46 +10,52 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Получаем ключи из переменных окружения сервера
-const API_KEYS = (process.env.VITE_API_KEYS || process.env.API_KEY || '').split(',').map(k => k.trim()).filter(Boolean);
+// API keys are read ONLY from server-side environment variables
+// They are NEVER exposed to the frontend bundle
+const API_KEYS = (process.env.GEMINI_API_KEYS || process.env.VITE_API_KEYS || process.env.API_KEY || '')
+  .split(',')
+  .map(k => k.trim())
+  .filter(k => k.length > 5);
+
 let currentKeyIndex = 0;
 
-import { createProxyMiddleware, fixRequestBody } from 'http-proxy-middleware';
+console.log(`[Proxy] Server starting. API keys available: ${API_KEYS.length}`);
 
-// Прокси для Google API через надежный http-proxy-middleware
+// Proxy for Google Generative AI API
+// The frontend sends requests to /google-api/..., this proxy forwards them to Google
+// and injects the real server-side API key, hiding it from the browser.
 app.use('/google-api', createProxyMiddleware({
   target: 'https://generativelanguage.googleapis.com',
   changeOrigin: true,
-  pathRewrite: (path, req) => {
-    // Убираем возможный фейковый ключ клиента из URL
-    const cleanPath = path.replace(/^\/google-api/, '').replace(/([?&])key=[^&]+(&|$)/, '$1').replace(/&$/, '').replace(/\?$/, '');
-
-    if (API_KEYS.length > 0) {
-      const url = new URL(cleanPath, 'https://generativelanguage.googleapis.com');
-      url.searchParams.set('key', API_KEYS[currentKeyIndex]);
-      return url.pathname + url.search;
-    }
-    return cleanPath;
+  // Remove the /google-api prefix and strip any ?key= from URL (browser shouldn't send real keys anyway)
+  pathRewrite: (reqPath) => {
+    return reqPath
+      .replace(/^\/google-api/, '')
+      .replace(/([?&])key=[^&]+(&|$)/, '$1')
+      .replace(/&$/, '')
+      .replace(/\?$/, '');
   },
-  onProxyReq: (proxyReq, req, res) => {
-    // Скрываем реальный IP-адрес клиента для безопасности
-    proxyReq.removeHeader('x-forwarded-for');
-    proxyReq.removeHeader('x-forwarded-host');
+  on: {
+    proxyReq: (proxyReq, req) => {
+      // Strip client IP for anonymity
+      proxyReq.removeHeader('x-forwarded-for');
+      proxyReq.removeHeader('x-forwarded-host');
+      proxyReq.removeHeader('x-real-ip');
 
-    if (API_KEYS.length > 0) {
-      proxyReq.setHeader('x-goog-api-key', API_KEYS[currentKeyIndex]);
-    } else if (req.headers['x-goog-api-key']) {
-      proxyReq.setHeader('x-goog-api-key', req.headers['x-goog-api-key']);
+      // Inject server-side API key via header (preferred method, no key in URL)
+      if (API_KEYS.length > 0) {
+        const key = API_KEYS[currentKeyIndex % API_KEYS.length];
+        proxyReq.setHeader('x-goog-api-key', key);
+        currentKeyIndex++;
+        console.log(`[Proxy] Forwarding request using key index ${(currentKeyIndex - 1) % API_KEYS.length}`);
+      } else {
+        console.error('[Proxy] WARNING: No API keys configured! Set GEMINI_API_KEYS env variable on Render.');
+      }
+    },
+    error: (err, req, res) => {
+      console.error('[Proxy] Error:', err.message);
+      res.status(502).json({ error: { message: 'Proxy connection to Google API failed', details: err.message } });
     }
-
-    // Если express.json используется глобально, чиним тело запроса
-    if (req.body && Object.keys(req.body).length > 0) {
-      fixRequestBody(proxyReq, req);
-    }
-  },
-  onError: (err, req, res) => {
-    console.error('[HPM Error]', err);
-    res.status(500).json({ error: { message: 'Ошибка связи с серверами Google через прокси' } });
   }
 }));
 
@@ -70,5 +76,5 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}. AI Proxy active.`);
+  console.log(`[Proxy] Server running on port ${PORT}. Proxy active with ${API_KEYS.length} API key(s).`);
 });
