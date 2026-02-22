@@ -154,6 +154,9 @@ const InfoModal: React.FC<{ onClose: () => void; }> = ({ onClose }) => (
             Проект использует личные API-ключи автора, которые имеют жесткие суточные лимиты от Google.
             По этой причине приложение работает <strong>"как есть"</strong>, и его стабильность и доступность не гарантируются.
           </p>
+          <p className="text-slate-400 text-xs mt-3 pt-3 border-t border-amber-900/30">
+            Эта версия (t-oracle) работает через прокси и доступна без VPN. Если у вас <strong>уже включен VPN</strong>, вы можете использовать <a href="https://tarot-oracle.onrender.com/" target="_blank" rel="noopener noreferrer" className="text-amber-400 hover:text-amber-300 underline font-bold transition-colors">статичную версию (tarot-oracle)</a> — она быстрее и не отключается (не засыпает).
+          </p>
         </div>
 
         <p className="text-xs text-slate-500 italic">
@@ -175,7 +178,7 @@ const InfoModal: React.FC<{ onClose: () => void; }> = ({ onClose }) => (
             rel="noopener noreferrer"
             className="w-full flex items-center justify-center gap-3 py-3 px-4 bg-[#2AABEE]/10 border border-[#2AABEE]/30 hover:bg-[#2AABEE]/20 text-[#2AABEE] font-bold uppercase tracking-widest rounded transition-colors shadow-lg"
           >
-            <Coffee className="w-5 h-5 shrink-0" /> Угостить через Telegram (Мир)
+            <Coffee className="w-5 h-5 shrink-0" /> Донат через Telegram (World)
           </a>
         </div>
       </div>
@@ -297,7 +300,7 @@ const App: React.FC = () => {
       <div className="fixed top-4 right-4 z-[60]">
         <button
           onClick={() => setShowInfo(true)}
-          className="p-2 text-slate-500 hover:text-amber-500 bg-slate-900/50 hover:bg-slate-800 rounded-full backdrop-blur transition-all border border-transparent hover:border-amber-500/30"
+          className="p-2 text-amber-500/60 hover:text-amber-400 bg-slate-900/80 hover:bg-slate-800 rounded-full backdrop-blur transition-all border border-slate-700/50 hover:border-amber-500/50 shadow-lg"
           title="Справка"
         >
           <Info className="w-6 h-6" />
@@ -335,7 +338,7 @@ const App: React.FC = () => {
                 </div>
                 <div className="leading-relaxed">
                   <strong className="text-amber-500 block mb-1 uppercase tracking-widest font-bold text-[10px] sm:text-[11px]">Совет Оракула</strong>
-                  Часто обращаетесь за советом? Добавьте Оракула <strong>на экран «Домой»</strong> вашего телефона. На iPhone нажмите три точки, прокрутите вниз и выберите «На экран Домой» (или «Добавить ярлык»). На Android — меню (три точки), затем выберите «На экран Домой».
+                  Добавьте Оракула <strong>на экран «Домой»</strong>, чтобы обращаться к нему в один клик! Нажмите «Поделиться» или меню (в виде трех точек) в браузере и выберите «На экран Домой» / «Добавить ярлык». Приложение откроется в удобном <strong>полноэкранном режиме</strong>, работая как нативное приложение без лишних рамок браузера!
                 </div>
               </div>
             </div>
@@ -387,7 +390,8 @@ const App: React.FC = () => {
               <ChevronDown className={`text-amber-500 shrink-0 transition-transform ${isQuestionExpanded ? 'rotate-180' : ''}`} />
               <span className="text-amber-100 font-serif truncate text-xs sm:text-sm">{question}</span>
             </div>
-            <button onClick={resetApp} className="p-2 text-slate-500 hover:text-white transition-colors shrink-0"><RefreshCw className="w-5 h-5" /></button>
+            {/* Added margin-right to prevent overlap with the global Info button on the right */}
+            <button onClick={resetApp} className="mr-14 p-2 text-slate-500 hover:text-white transition-colors shrink-0 bg-slate-900/50 hover:bg-slate-800 rounded-full"><RefreshCw className="w-5 h-5" /></button>
           </header>
 
           <div className="flex-1 p-4 sm:p-6 flex flex-col items-center pb-24">
@@ -449,7 +453,7 @@ const App: React.FC = () => {
                             rel="noopener noreferrer"
                             className="flex-1 flex items-center justify-center gap-2 py-3 px-4 bg-[#2AABEE]/10 border border-[#2AABEE]/30 hover:bg-[#2AABEE]/20 text-[#2AABEE] font-bold uppercase tracking-widest text-xs rounded transition-colors"
                           >
-                            <Coffee className="w-4 h-4" /> Telegram (Мир)
+                            <Coffee className="w-4 h-4" /> Донат через Telegram (World)
                           </a>
                         </div>
                       </>
