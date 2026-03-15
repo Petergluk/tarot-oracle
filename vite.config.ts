@@ -9,6 +9,7 @@ export default defineConfig(({ mode }) => {
     .split(',')
     .map((k) => k.trim())
     .filter((k) => k.length > 5);
+  const nvidiaApiKey = (env.NVIDIA_API_KEY || '').trim();
 
   return {
     plugins: [react()],
@@ -23,6 +24,18 @@ export default defineConfig(({ mode }) => {
             proxy.on('proxyReq', (proxyReq) => {
               if (devKeys.length > 0) {
                 proxyReq.setHeader('x-goog-api-key', devKeys[0]);
+              }
+            });
+          },
+        },
+        '/nvidia-api': {
+          target: 'https://integrate.api.nvidia.com/v1',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/nvidia-api/, ''),
+          configure: (proxy) => {
+            proxy.on('proxyReq', (proxyReq) => {
+              if (nvidiaApiKey.length > 0) {
+                proxyReq.setHeader('authorization', `Bearer ${nvidiaApiKey}`);
               }
             });
           },

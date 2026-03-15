@@ -255,9 +255,17 @@ const SettingsModal: React.FC<{ config: AIConfig; onConfigChange: (config: AICon
             <div className="space-y-2">
               <label className="text-xs uppercase text-slate-400 tracking-widest font-bold">Модель AI</label>
               <select value={config.model} onChange={(e) => onConfigChange({ ...config, model: e.target.value })} className="w-full bg-slate-950 border border-slate-700 text-slate-200 p-2 text-sm rounded focus:border-amber-500 outline-none">
-                <option value="gemini-3-flash-preview">Gemini 3 Flash Preview (рекомендуется)</option>
-                <option value="gemini-3.1-flash-lite-preview">Gemini 3.1 Flash-Lite Preview</option>
-                <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                <optgroup label="Google Gemini">
+                  <option value="gemini-3-flash-preview">Gemini 3 Flash Preview (рекомендуется)</option>
+                  <option value="gemini-3.1-flash-lite-preview">Gemini 3.1 Flash-Lite Preview</option>
+                  <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                </optgroup>
+                <optgroup label="NVIDIA">
+                  <option value="deepseek-ai/deepseek-r1">DeepSeek R1</option>
+                  <option value="qwen/qwen2.5-72b-instruct">Qwen 2.5 72B Instruct</option>
+                  <option value="meta/llama-3.3-70b-instruct">Llama 3.3 70B Instruct</option>
+                  <option value="minimaxai/minimax-m2.1">MiniMax M2.1</option>
+                </optgroup>
               </select>
             </div>
             <div className="space-y-2">

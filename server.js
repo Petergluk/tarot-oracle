@@ -19,6 +19,7 @@ const API_KEYS = (process.env.GEMINI_API_KEYS || process.env.VITE_API_KEYS || pr
   .split(',')
   .map(k => k.trim())
   .filter(k => k.length > 5);
+const NVIDIA_API_KEY = (process.env.NVIDIA_API_KEY || '').trim();
 
 let currentKeyIndex = 0;
 
@@ -174,7 +175,7 @@ const recordEvent = async (type) => {
 // Initialize DB on start
 initDB();
 
-console.log(`[Proxy] Server starting. API keys available: ${API_KEYS.length}`);
+console.log(`[Proxy] Server starting. Gemini keys: ${API_KEYS.length}. NVIDIA key: ${NVIDIA_API_KEY ? 'configured' : 'missing'}`);
 
 // Proxy for Google Generative AI API
 // The frontend sends requests to /google-api/..., this proxy forwards them to Google
@@ -202,11 +203,6 @@ app.use('/google-api', createProxyMiddleware({
       proxyReq.setHeader('x-goog-api-key', key);
       currentKeyIndex++;
 
-      // Track question stats (generateContent = a real question)
-      if (req.url.includes('generateContent')) {
-        recordEvent('question').catch(console.error);
-      }
-
       console.log(`[Proxy] Forwarding request using key index ${(currentKeyIndex - 1) % API_KEYS.length}`);
     } else {
       console.error('[Proxy] WARNING: No API keys configured! Set GEMINI_API_KEYS env variable on Render.');
@@ -215,6 +211,28 @@ app.use('/google-api', createProxyMiddleware({
   onError: (err, req, res) => {
     console.error('[Proxy] Error:', err.message);
     res.status(502).json({ error: { message: 'Proxy connection to Google API failed', details: err.message } });
+  }
+}));
+
+// Proxy for NVIDIA Integrate API
+app.use('/nvidia-api', createProxyMiddleware({
+  target: 'https://integrate.api.nvidia.com/v1',
+  changeOrigin: true,
+  pathRewrite: (reqPath) => reqPath.replace(/^\/nvidia-api/, ''),
+  onProxyReq: (proxyReq) => {
+    proxyReq.removeHeader('x-forwarded-for');
+    proxyReq.removeHeader('x-forwarded-host');
+    proxyReq.removeHeader('x-real-ip');
+
+    if (NVIDIA_API_KEY) {
+      proxyReq.setHeader('authorization', `Bearer ${NVIDIA_API_KEY}`);
+    } else {
+      console.error('[Proxy] WARNING: NVIDIA_API_KEY is not configured.');
+    }
+  },
+  onError: (err, req, res) => {
+    console.error('[NVIDIA Proxy] Error:', err.message);
+    res.status(502).json({ error: { message: 'Proxy connection to NVIDIA API failed', details: err.message } });
   }
 }));
 
@@ -267,6 +285,7 @@ app.post('/api/questions', async (req, res) => {
   }
 
   await recordQuestionLog(question);
+  await recordEvent('question');
   return res.json({ ok: true });
 });
 
@@ -314,5 +333,5 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`[Proxy] Server running on port ${PORT}. Proxy active with ${API_KEYS.length} API key(s).`);
+  console.log(`[Proxy] Server running on port ${PORT}. Gemini keys: ${API_KEYS.length}, NVIDIA key: ${NVIDIA_API_KEY ? 'yes' : 'no'}.`);
 });

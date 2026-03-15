@@ -14,6 +14,16 @@ type ProgressCallback = (message: string) => void;
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 const REQUEST_TIMEOUT_MS = 12000;
 const ATTEMPTS_PER_MODEL = 2;
+const GEMINI_FALLBACK_MODELS = [
+  'gemini-3-flash-preview',
+  'gemini-3.1-flash-lite-preview',
+  'gemini-2.5-pro'
+];
+const NVIDIA_FALLBACK_MODELS = [
+  'deepseek-ai/deepseek-r1',
+  'qwen/qwen2.5-72b-instruct',
+  'meta/llama-3.3-70b-instruct'
+];
 
 const withTimeout = async <T>(promise: Promise<T>, timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> => {
   return Promise.race([
@@ -42,26 +52,27 @@ const extractErrorMessage = (e: any): string => {
 };
 
 const buildModelCandidates = (preferred?: string): string[] => {
-  const fallbackModels = [
-    'gemini-3-flash-preview',
-    'gemini-3.1-flash-lite-preview',
-    'gemini-2.5-pro'
-  ];
-  const ordered = [preferred || '', ...fallbackModels].filter(Boolean);
-  return [...new Set(ordered)];
+  const preferredModel = (preferred || '').trim();
+  const isPreferredNvidia = preferredModel.includes('/') && !preferredModel.startsWith('gemini-');
+  const ordered = isPreferredNvidia
+    ? [preferredModel, ...NVIDIA_FALLBACK_MODELS, ...GEMINI_FALLBACK_MODELS]
+    : [preferredModel, ...GEMINI_FALLBACK_MODELS, ...NVIDIA_FALLBACK_MODELS];
+  return [...new Set(ordered.filter(Boolean))];
 };
 
 const isRetryableError = (e: any): boolean => {
   const msg = extractErrorMessage(e).toLowerCase();
-  return msg.includes('503') || msg.includes('429') || msg.includes('500') || msg.includes('unavailable') || msg.includes('high demand') || msg.includes('quota') || msg.includes('timeout');
+  return msg.includes('503') || msg.includes('429') || msg.includes('500') || msg.includes('502') || msg.includes('504') || msg.includes('unavailable') || msg.includes('high demand') || msg.includes('quota') || msg.includes('timeout') || msg.includes('temporarily') || msg.includes('network') || msg.includes('aborted');
 };
+
+const isGeminiModel = (model: string): boolean => model.trim().toLowerCase().startsWith('gemini-');
 
 /**
  * Определяем базовый URL.
  * На хостинге (не google/localhost) отправляем запросы через серверный прокси /google-api
  * который подставит настоящий ключ из своей переменной окружения.
  */
-const getBaseUrl = () => {
+const getGeminiBaseUrl = () => {
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
     // AI Studio/Google-hosted environment: direct requests
@@ -74,8 +85,8 @@ const getBaseUrl = () => {
   return undefined;
 };
 
-const getAllApiKeys = (): string[] => {
-  const baseUrl = getBaseUrl();
+const getGeminiApiKeys = (): string[] => {
+  const baseUrl = getGeminiBaseUrl();
 
   if (baseUrl) {
     // Мы за прокси. Ключ SDK всё равно нужен (API не принимает пустой строку),
@@ -93,6 +104,90 @@ const getAllApiKeys = (): string[] => {
     .split(',')
     .map((k: string) => k.trim())
     .filter((k: string) => k.length > 5);
+};
+
+const getNvidiaBaseUrl = (): string => {
+  if (typeof window !== 'undefined') {
+    return `${window.location.origin}/nvidia-api`;
+  }
+  return '/nvidia-api';
+};
+
+const parseMaybeJson = (value: string): any => {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+};
+
+const extractTextFromOpenAIContent = (content: any): string => {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === 'string') return part;
+        if (part && typeof part.text === 'string') return part.text;
+        return '';
+      })
+      .join('')
+      .trim();
+  }
+  return '';
+};
+
+const extractSpreadIdFromText = (rawText: string): string | null => {
+  const cleaned = rawText
+    .replace(/```json/gi, '')
+    .replace(/```/g, '')
+    .trim();
+  const parsed = parseMaybeJson(cleaned);
+  if (parsed?.spreadId && typeof parsed.spreadId === 'string') {
+    return parsed.spreadId;
+  }
+  const match = cleaned.match(/"spreadId"\s*:\s*"([^"]+)"/i);
+  return match?.[1] || null;
+};
+
+const requestNvidiaCompletion = async (
+  model: string,
+  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
+  temperature: number,
+  maxTokens: number
+): Promise<string> => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${getNvidiaBaseUrl()}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature,
+        top_p: 0.95,
+        max_tokens: maxTokens,
+        stream: false
+      }),
+      signal: controller.signal
+    });
+
+    const data = await response.json().catch(() => ({} as any));
+    if (!response.ok) {
+      const message = data?.error?.message || data?.message || `HTTP ${response.status}`;
+      throw new Error(message);
+    }
+
+    const content = extractTextFromOpenAIContent(data?.choices?.[0]?.message?.content);
+    if (!content) {
+      throw new Error(`Пустой ответ модели ${model}`);
+    }
+    return content;
+  } finally {
+    clearTimeout(timeout);
+  }
 };
 
 export const DEFAULT_SYSTEM_PROMPT = `Ты великий мудрец и оракул. Ты видишь нити времени сплетающиеся в узорах судеб. 
@@ -132,9 +227,8 @@ export const selectBestSpread = async (
     return availableSpreads.some(s => s.id === 'four_card_risk_decision') ? 'four_card_risk_decision' : 'three_card_classic';
   }
 
-  const keys = getAllApiKeys();
-  if (keys.length === 0) return "three_card_classic";
   const modelCandidates = buildModelCandidates(config?.model);
+  const keys = getGeminiApiKeys();
 
   const spreadOptions = availableSpreads.map(s => ({
     id: s.id,
@@ -145,45 +239,82 @@ export const selectBestSpread = async (
   const prompt = `You are a Master Tarot Reader. Question: "${question}". Return ONLY the JSON with the selected spreadId from this list: ${JSON.stringify(spreadOptions)}. Result format: {"spreadId": "id"}`;
 
   for (const model of modelCandidates) {
-    for (const apiKey of keys) {
-      for (let attempt = 0; attempt < ATTEMPTS_PER_MODEL; attempt++) {
-        onProgress?.(`Подбираем расклад: ${model}, попытка ${attempt + 1}/${ATTEMPTS_PER_MODEL}`);
-        try {
-          const ai = new GoogleGenAI({
-            apiKey,
-            httpOptions: { baseUrl: getBaseUrl() }
-          });
+    if (isGeminiModel(model)) {
+      if (keys.length === 0) {
+        onProgress?.('Gemini-ключи недоступны, пробуем другой провайдер...');
+        continue;
+      }
+      for (const [keyIndex, apiKey] of keys.entries()) {
+        for (let attempt = 0; attempt < ATTEMPTS_PER_MODEL; attempt++) {
+          onProgress?.(`Подбираем расклад: ${model}, ключ ${keyIndex + 1}/${keys.length}, попытка ${attempt + 1}/${ATTEMPTS_PER_MODEL}`);
+          try {
+            const ai = new GoogleGenAI({
+              apiKey,
+              httpOptions: { baseUrl: getGeminiBaseUrl() }
+            });
 
-          const response = await withTimeout(ai.models.generateContent({
-            model,
-            contents: prompt,
-            config: {
-              responseMimeType: "application/json",
-              responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                  spreadId: { type: Type.STRING },
-                },
-                required: ["spreadId"]
+            const response = await withTimeout(ai.models.generateContent({
+              model,
+              contents: prompt,
+              config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                  type: Type.OBJECT,
+                  properties: {
+                    spreadId: { type: Type.STRING },
+                  },
+                  required: ["spreadId"]
+                }
               }
-            }
-          }));
+            }));
 
-          const cleanText = (response.text || "{}").replace(/```json/gi, '').replace(/```/g, '').trim();
-          const result = JSON.parse(cleanText);
-          return result.spreadId || "three_card_classic";
-        } catch (e: any) {
-          const message = extractErrorMessage(e);
-          if (isRetryableError(e) && attempt < ATTEMPTS_PER_MODEL - 1) {
-            console.warn(`[Spread] retry ${attempt + 1} for model ${model}: ${message}`);
-            onProgress?.(`Ключ не ответил, повторяем попытку...`);
-            await sleep((attempt + 1) * 1200);
-            continue;
+            const spreadId = extractSpreadIdFromText(response.text || '{}');
+            if (spreadId) return spreadId;
+            throw new Error('Не удалось распарсить spreadId');
+          } catch (e: any) {
+            const message = extractErrorMessage(e);
+            if (isRetryableError(e) && attempt < ATTEMPTS_PER_MODEL - 1) {
+              console.warn(`[Spread] retry ${attempt + 1} for model ${model}: ${message}`);
+              onProgress?.('Ключ не ответил, повторяем попытку...');
+              await sleep((attempt + 1) * 1200);
+              continue;
+            }
+            console.warn(`[Spread] model ${model} failed on key ${keyIndex}: ${message}`);
+            if (keyIndex < keys.length - 1) {
+              onProgress?.('Этот ключ не сработал, пробуем следующий...');
+            } else {
+              onProgress?.(`Модель ${model} недоступна, переключаемся...`);
+            }
+            break;
           }
-          console.warn(`[Spread] model ${model} failed: ${message}`);
-          onProgress?.(`Модель ${model} недоступна, пробуем следующую...`);
-          break; // try next key or model
         }
+      }
+      continue;
+    }
+
+    for (let attempt = 0; attempt < ATTEMPTS_PER_MODEL; attempt++) {
+      onProgress?.(`Подбираем расклад через NVIDIA: ${model}, попытка ${attempt + 1}/${ATTEMPTS_PER_MODEL}`);
+      try {
+        const answer = await requestNvidiaCompletion(
+          model,
+          [{ role: 'user', content: prompt }],
+          config?.temperature ?? 0.4,
+          300
+        );
+        const spreadId = extractSpreadIdFromText(answer);
+        if (spreadId) return spreadId;
+        throw new Error('Не удалось распарсить spreadId');
+      } catch (e: any) {
+        const message = extractErrorMessage(e);
+        if (isRetryableError(e) && attempt < ATTEMPTS_PER_MODEL - 1) {
+          console.warn(`[Spread NVIDIA] retry ${attempt + 1} for model ${model}: ${message}`);
+          onProgress?.('NVIDIA-модель временно не ответила, повторяем...');
+          await sleep((attempt + 1) * 1200);
+          continue;
+        }
+        console.warn(`[Spread NVIDIA] model ${model} failed: ${message}`);
+        onProgress?.(`NVIDIA-модель ${model} недоступна, пробуем следующую...`);
+        break;
       }
     }
   }
@@ -198,10 +329,7 @@ export const getTarotReading = async (
   config?: AIConfig,
   onProgress?: ProgressCallback
 ): Promise<string> => {
-  const keys = getAllApiKeys();
-  if (keys.length === 0) {
-    throw new Error("API ключи не найдены.");
-  }
+  const keys = getGeminiApiKeys();
   const modelCandidates = buildModelCandidates(config?.model);
 
   let cardDescription = "";
@@ -228,39 +356,80 @@ export const getTarotReading = async (
   let lastError = "";
 
   for (const model of modelCandidates) {
-    for (const apiKey of keys) {
-      for (let attempt = 0; attempt < ATTEMPTS_PER_MODEL; attempt++) {
-        onProgress?.(`Пробуем ${model}: попытка ${attempt + 1}/${ATTEMPTS_PER_MODEL}`);
-        try {
-          const ai = new GoogleGenAI({
-            apiKey,
-            httpOptions: { baseUrl: getBaseUrl() }
-          });
+    if (isGeminiModel(model)) {
+      if (keys.length === 0) {
+        lastError = "Gemini API ключи не найдены.";
+        onProgress?.('Gemini-ключи недоступны, пробуем NVIDIA-модели...');
+        continue;
+      }
 
-          const response = await withTimeout(ai.models.generateContent({
-            model,
-            contents: prompt,
-            config: {
-              temperature: config?.temperature ?? 1.1,
-              systemInstruction: config?.systemPrompt || DEFAULT_SYSTEM_PROMPT
+      for (const [keyIndex, apiKey] of keys.entries()) {
+        for (let attempt = 0; attempt < ATTEMPTS_PER_MODEL; attempt++) {
+          onProgress?.(`Пробуем ${model}: ключ ${keyIndex + 1}/${keys.length}, попытка ${attempt + 1}/${ATTEMPTS_PER_MODEL}`);
+          try {
+            const ai = new GoogleGenAI({
+              apiKey,
+              httpOptions: { baseUrl: getGeminiBaseUrl() }
+            });
+
+            const response = await withTimeout(ai.models.generateContent({
+              model,
+              contents: prompt,
+              config: {
+                temperature: config?.temperature ?? 1.1,
+                systemInstruction: config?.systemPrompt || DEFAULT_SYSTEM_PROMPT
+              }
+            }));
+
+            if (response.text) return response.text;
+            lastError = `Empty response from model ${model}`;
+          } catch (e: any) {
+            lastError = extractErrorMessage(e);
+
+            if (isRetryableError(e) && attempt < ATTEMPTS_PER_MODEL - 1) {
+              console.warn(`[Reading] retry ${attempt + 1} for model ${model}: ${lastError}`);
+              onProgress?.('Ключ не ответил, повторяем попытку...');
+              await sleep((attempt + 1) * 1200);
+              continue;
             }
-          }));
-
-          if (response.text) return response.text;
-          lastError = `Empty response from model ${model}`;
-        } catch (e: any) {
-          lastError = extractErrorMessage(e);
-
-          if (isRetryableError(e) && attempt < ATTEMPTS_PER_MODEL - 1) {
-            console.warn(`[Reading] retry ${attempt + 1} for model ${model}: ${lastError}`);
-            onProgress?.(`Ключ не ответил, пробуем снова...`);
-            await sleep((attempt + 1) * 1200);
-            continue;
+            console.error(`[Reading] model ${model} failed on key ${keyIndex}: ${lastError}`);
+            if (keyIndex < keys.length - 1) {
+              onProgress?.('Ключ не сработал, пробуем следующий...');
+            } else {
+              onProgress?.(`Не сработало на ${model}, переключаем модель...`);
+            }
+            break;
           }
-          console.error(`[Reading] model ${model} failed: ${lastError}`);
-          onProgress?.(`Не сработало на ${model}, переключаем модель...`);
-          break; // try next key or model
         }
+      }
+      continue;
+    }
+
+    for (let attempt = 0; attempt < ATTEMPTS_PER_MODEL; attempt++) {
+      onProgress?.(`Пробуем NVIDIA ${model}: попытка ${attempt + 1}/${ATTEMPTS_PER_MODEL}`);
+      try {
+        const answer = await requestNvidiaCompletion(
+          model,
+          [
+            { role: 'system', content: config?.systemPrompt || DEFAULT_SYSTEM_PROMPT },
+            { role: 'user', content: prompt }
+          ],
+          config?.temperature ?? 1.1,
+          1400
+        );
+        if (answer.trim()) return answer.trim();
+        lastError = `Empty response from model ${model}`;
+      } catch (e: any) {
+        lastError = extractErrorMessage(e);
+        if (isRetryableError(e) && attempt < ATTEMPTS_PER_MODEL - 1) {
+          console.warn(`[Reading NVIDIA] retry ${attempt + 1} for model ${model}: ${lastError}`);
+          onProgress?.('NVIDIA-модель не ответила, повторяем...');
+          await sleep((attempt + 1) * 1200);
+          continue;
+        }
+        console.error(`[Reading NVIDIA] model ${model} failed: ${lastError}`);
+        onProgress?.(`NVIDIA-модель ${model} недоступна, переключаем модель...`);
+        break;
       }
     }
   }
