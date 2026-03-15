@@ -1,17 +1,57 @@
 
 // App.tsx
 // v3.8.0 @ 2025-05-21
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Loader2, Sparkles, RefreshCw, Eye, ChevronDown, Settings, X, AlertCircle, Info, Coffee, Star } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
 // Internal imports
-import { AppState, Spread, DrawnCard } from './types';
+import { AppState, Spread, DrawnCard, TarotCard, ArcanaType } from './types';
 import { DECK, SPREADS } from './constants';
 import { getTarotReading, selectBestSpread, AIConfig, DEFAULT_SYSTEM_PROMPT } from './services/geminiService';
 import CardComponent from './components/CardComponent';
 
 type ExtendedAppState = AppState | 'consulting';
+
+const shuffleDeck = (cards: TarotCard[]): TarotCard[] => {
+  const deck = [...cards];
+  for (let i = deck.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+  return deck;
+};
+
+const createHiddenSlots = (count: number): DrawnCard[] => {
+  const base = DECK[0];
+  return Array.from({ length: count }, (_, index) => ({
+    ...base,
+    id: `hidden_slot_${index}`,
+    positionIndex: index,
+    isReversed: false
+  }));
+};
+
+const getCardImagePath = (card: DrawnCard) => {
+  const folder = card.arcana === ArcanaType.MAJOR ? 'major' : 'minor';
+  const baseUrl = import.meta.env.BASE_URL || '/';
+  const normalizedBaseUrl = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+  return `${normalizedBaseUrl}cards/${folder}/${card.imageFileName}`;
+};
+
+const getOrientationHint = (isReversed: boolean) => {
+  if (isReversed) {
+    return 'Перевернутая позиция';
+  }
+  return 'Прямая позиция';
+};
+
+const getCardMeaning = (card: DrawnCard) => {
+  if (card.isReversed) {
+    return card.reversedDescription || 'Перевернутая позиция указывает на внутренний конфликт или задержку проявления энергии карты.';
+  }
+  return card.description;
+};
 
 const SettingsModal: React.FC<{ config: AIConfig; onConfigChange: (config: AIConfig) => void; onClose: () => void; }> = ({ config, onConfigChange, onClose }) => {
   const [activeTab, setActiveTab] = useState<'settings' | 'stats'>('settings');
@@ -209,19 +249,15 @@ const App: React.FC = () => {
   const [dismissedPwaHint, setDismissedPwaHint] = useState<boolean>(() => {
     return localStorage.getItem('oracle_dismissed_pwa') === 'true';
   });
+  const [remainingDeck, setRemainingDeck] = useState<TarotCard[]>([]);
+  const [galleryIndex, setGalleryIndex] = useState<number | null>(null);
+  const [revealFlashIndex, setRevealFlashIndex] = useState<number | null>(null);
 
   const [aiConfig, setAiConfig] = useState<AIConfig>({
     temperature: 1.1,
     systemPrompt: DEFAULT_SYSTEM_PROMPT,
     model: 'gemini-3-flash-preview'
   });
-
-  const drawCards = (count: number): DrawnCard[] => {
-    const deckCopy = [...DECK].sort(() => Math.random() - 0.5);
-    return deckCopy.slice(0, count).map((card, index) => ({
-      ...card, positionIndex: index, isReversed: Math.random() > 0.7
-    }));
-  };
 
   const handleQuestionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -245,7 +281,9 @@ const App: React.FC = () => {
     setAppState('shuffling');
 
     setTimeout(() => {
-      setDrawnCards(drawCards(spread.cardCount));
+      const shuffledDeck = shuffleDeck(DECK);
+      setRemainingDeck(shuffledDeck);
+      setDrawnCards(createHiddenSlots(spread.cardCount));
       setRevealedCount(0);
       setReadingText('');
       setAppState('revealing');
@@ -261,9 +299,11 @@ const App: React.FC = () => {
       const text = await getTarotReading(currentQuestion, currentSpread, cards, aiConfig);
       setReadingText(text || "Оракул промолчал...");
 
-      const newCount = readingsCount + 1;
-      setReadingsCount(newCount);
-      localStorage.setItem('oracle_readings_count', newCount.toString());
+      setReadingsCount(prev => {
+        const next = prev + 1;
+        localStorage.setItem('oracle_readings_count', next.toString());
+        return next;
+      });
     } catch (err: any) {
       setApiError(err.message || "Ошибка соединения");
     } finally {
@@ -272,24 +312,84 @@ const App: React.FC = () => {
   }, [aiConfig]);
 
   const handleRevealCard = (index: number) => {
-    if (index === revealedCount) {
-      const newCount = revealedCount + 1;
-      setRevealedCount(newCount);
+    if (index < revealedCount) {
+      setGalleryIndex(index);
+      return;
+    }
+    if (index !== revealedCount || !selectedSpread || appState !== 'revealing') return;
+    if (remainingDeck.length === 0) return;
 
-      if (selectedSpread && newCount === selectedSpread.cardCount) {
-        setTimeout(() => fetchFinalReading(question, selectedSpread, drawnCards), 800);
-      }
+    const nextDeck = [...remainingDeck];
+    const randomDeckIndex = Math.floor(Math.random() * nextDeck.length);
+    const pickedCard = nextDeck.splice(randomDeckIndex, 1)[0];
+
+    const revealedCard: DrawnCard = {
+      ...pickedCard,
+      positionIndex: index,
+      isReversed: Math.random() > 0.7
+    };
+
+    const nextCount = revealedCount + 1;
+    const updatedCards = [...drawnCards];
+    updatedCards[index] = revealedCard;
+
+    setDrawnCards(updatedCards);
+    setRemainingDeck(nextDeck);
+    setRevealedCount(nextCount);
+    setRevealFlashIndex(index);
+
+    if (nextCount === selectedSpread.cardCount) {
+      setTimeout(() => fetchFinalReading(question, selectedSpread, updatedCards), 800);
     }
   };
+
+  const retryLastReading = () => {
+    if (!selectedSpread) return;
+    if (revealedCount !== selectedSpread.cardCount) return;
+    fetchFinalReading(question, selectedSpread, drawnCards);
+  };
+
+  useEffect(() => {
+    if (revealFlashIndex === null) return;
+    const timer = setTimeout(() => setRevealFlashIndex(null), 450);
+    return () => clearTimeout(timer);
+  }, [revealFlashIndex]);
+
+  const closeGallery = () => setGalleryIndex(null);
+
+  const showPrevCard = () => {
+    if (galleryIndex === null || revealedCount === 0) return;
+    setGalleryIndex((galleryIndex - 1 + revealedCount) % revealedCount);
+  };
+
+  const showNextCard = () => {
+    if (galleryIndex === null || revealedCount === 0) return;
+    setGalleryIndex((galleryIndex + 1) % revealedCount);
+  };
+
+  useEffect(() => {
+    if (galleryIndex === null) return;
+    const onKeydown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeGallery();
+      if (event.key === 'ArrowLeft') showPrevCard();
+      if (event.key === 'ArrowRight') showNextCard();
+    };
+    window.addEventListener('keydown', onKeydown);
+    return () => window.removeEventListener('keydown', onKeydown);
+  }, [galleryIndex, revealedCount]);
 
   const resetApp = () => {
     setAppState('intro');
     setQuestion('');
     setSelectedSpread(null);
+    setRemainingDeck([]);
+    setDrawnCards([]);
     setRevealedCount(0);
     setReadingText('');
     setApiError(null);
     setIsLoading(false);
+    setGalleryIndex(null);
+    setRevealFlashIndex(null);
   };
 
   return (
@@ -309,6 +409,61 @@ const App: React.FC = () => {
 
       {showSettings && <SettingsModal config={aiConfig} onConfigChange={setAiConfig} onClose={() => setShowSettings(false)} />}
       {showInfo && <InfoModal onClose={() => setShowInfo(false)} />}
+
+      {galleryIndex !== null && drawnCards[galleryIndex] && galleryIndex < revealedCount && (
+        <div className="fixed inset-0 z-[120] bg-black/95 backdrop-blur-md flex items-center justify-center p-4">
+          <button
+            onClick={closeGallery}
+            className="absolute top-4 right-4 p-2 rounded-full bg-slate-900/80 border border-slate-700 text-slate-300 hover:text-white"
+            title="Закрыть"
+          >
+            <X className="w-6 h-6" />
+          </button>
+
+          {revealedCount > 1 && (
+            <button
+              onClick={showPrevCard}
+              className="absolute left-4 sm:left-8 top-1/2 -translate-y-1/2 px-4 py-3 rounded-lg bg-slate-900/80 border border-slate-700 text-slate-200 hover:text-white"
+              title="Предыдущая карта"
+            >
+              ←
+            </button>
+          )}
+
+          <div className="max-w-4xl w-full flex flex-col items-center gap-4">
+            <img
+              src={getCardImagePath(drawnCards[galleryIndex])}
+              alt={drawnCards[galleryIndex].nameRu}
+              className={`max-h-[75vh] w-auto max-w-full object-contain rounded-xl border-4 border-slate-700 shadow-2xl ${drawnCards[galleryIndex].isReversed ? 'rotate-180' : ''}`}
+            />
+            <div className="text-center">
+              <p className="text-amber-500 uppercase tracking-widest text-xs mb-1">
+                {galleryIndex + 1}. {selectedSpread?.positions[galleryIndex]?.name}
+              </p>
+              <p className="text-slate-100 text-lg font-serif">
+                {drawnCards[galleryIndex].nameRu}
+                {drawnCards[galleryIndex].isReversed ? ' (Перевернутая)' : ''}
+              </p>
+              <p className="text-slate-300 text-sm mt-3 max-w-2xl">
+                {getCardMeaning(drawnCards[galleryIndex])}
+              </p>
+              <p className="text-slate-400 text-xs mt-2 max-w-2xl">
+                {getOrientationHint(drawnCards[galleryIndex].isReversed)}
+              </p>
+            </div>
+          </div>
+
+          {revealedCount > 1 && (
+            <button
+              onClick={showNextCard}
+              className="absolute right-4 sm:right-8 top-1/2 -translate-y-1/2 px-4 py-3 rounded-lg bg-slate-900/80 border border-slate-700 text-slate-200 hover:text-white"
+              title="Следующая карта"
+            >
+              →
+            </button>
+          )}
+        </div>
+      )}
 
       {appState === 'intro' && (
         <div className="flex flex-col items-center justify-center min-h-screen text-center p-6 animate-fade-in relative pb-32">
@@ -398,7 +553,7 @@ const App: React.FC = () => {
             <h3 className="text-xl sm:text-2xl font-serif text-amber-500 mb-8 sm:mb-12 uppercase tracking-widest text-center">{selectedSpread?.name}</h3>
             <div className="flex flex-wrap justify-center gap-4 sm:gap-12 mb-16">
               {drawnCards.map((card, idx) => (
-                <div key={idx} className="flex flex-col items-center gap-4">
+                <div key={idx} className={`flex flex-col items-center gap-4 transition-all duration-300 ${revealFlashIndex === idx ? 'scale-105 drop-shadow-[0_0_20px_rgba(245,158,11,0.4)]' : ''}`}>
                   <span className={`text-[9px] sm:text-[10px] uppercase font-bold tracking-widest ${revealedCount > idx ? 'text-amber-500' : 'text-slate-700'}`}>
                     {idx + 1}. {selectedSpread?.positions[idx].name}
                   </span>
@@ -480,6 +635,12 @@ const App: React.FC = () => {
                     <div className="bg-black/40 p-3 rounded font-mono text-[10px] text-red-500/70 break-all border border-red-900/20 text-left cursor-text select-text mt-4">
                       {apiError}
                     </div>
+                    <button
+                      onClick={retryLastReading}
+                      className="mt-4 w-full py-4 bg-amber-900/20 border border-amber-800/50 hover:bg-amber-900/40 transition text-amber-100 uppercase tracking-widest text-xs font-bold rounded"
+                    >
+                      Повторить запрос
+                    </button>
                     <button onClick={resetApp} className="mt-8 w-full py-4 bg-red-900/20 border border-red-900/40 hover:bg-red-900/40 transition text-red-100 uppercase tracking-widest text-xs font-bold rounded">
                       Вернуться на главную
                     </button>

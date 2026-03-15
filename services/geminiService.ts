@@ -25,11 +25,11 @@ const isRetryableError = (e: any): boolean => {
 const getBaseUrl = () => {
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
-    // AI Studio или localhost - работаем напрямую
-    if (host.includes('aistudio') || host.includes('google') || host === 'localhost' || host === '127.0.0.1') {
+    // AI Studio/Google-hosted environment: direct requests
+    if (host.includes('aistudio') || host.includes('google')) {
       return undefined;
     }
-    // На деплой - через прокси
+    // Local dev and deployed web app: use proxy endpoint
     return window.location.origin + '/google-api';
   }
   return undefined;
@@ -70,6 +70,28 @@ export const selectBestSpread = async (
   availableSpreads: Spread[],
   config?: AIConfig
 ): Promise<string> => {
+  const normalizedQuestion = question.toLowerCase();
+
+  // Deterministic shortcuts for common choice prompts.
+  if (/(3|три)\s*(вариант|выбор|путь|опц)/.test(normalizedQuestion)) {
+    return availableSpreads.some(s => s.id === 'three_card_choice') ? 'three_card_choice' : 'three_card_classic';
+  }
+  if (/(2|два|двух)\s*(вариант|выбор|путь|опц)/.test(normalizedQuestion)) {
+    return availableSpreads.some(s => s.id === 'two_card_choice') ? 'two_card_choice' : 'three_card_classic';
+  }
+  if (/(мисси|предназнач|призвани|предназначение души|дело жизни)/.test(normalizedQuestion)) {
+    return availableSpreads.some(s => s.id === 'five_card_mission_ray') ? 'five_card_mission_ray' : 'three_card_classic';
+  }
+  if (/(карьер|работ|професси|оффер|должност|увольнен|повышен)/.test(normalizedQuestion)) {
+    return availableSpreads.some(s => s.id === 'five_card_career_choice') ? 'five_card_career_choice' : 'three_card_classic';
+  }
+  if (/(отношен|партнер|любов|брак|бывш|чувств)/.test(normalizedQuestion)) {
+    return availableSpreads.some(s => s.id === 'four_card_relationships') ? 'four_card_relationships' : 'three_card_classic';
+  }
+  if (/(риск|стоит ли|опасн|неопредел|инвест|влож|кредит)/.test(normalizedQuestion)) {
+    return availableSpreads.some(s => s.id === 'four_card_risk_decision') ? 'four_card_risk_decision' : 'three_card_classic';
+  }
+
   const keys = getAllApiKeys();
   if (keys.length === 0) return "three_card_classic";
 

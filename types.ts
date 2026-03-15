@@ -18,7 +18,8 @@ export interface TarotCard {
   number: number;
   suit: Suit;
   arcana: ArcanaType;
-  description: string; // Brief keyword description
+  description: string; // Upright meaning summary
+  reversedDescription?: string; // Reversed meaning summary
   imageFileName: string; // Exact filename from assets
 }
 

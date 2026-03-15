@@ -43,18 +43,16 @@ const getMajorArcanaIcon = (id: number, className: string = "w-full h-full") => 
 };
 
 const CardComponent: React.FC<CardComponentProps> = ({ card, isRevealed, onClick, className = '' }) => {
-  const [isImageLoaded, setIsImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
-  
-  useEffect(() => {
-    setIsImageLoaded(false);
-    setImageError(false);
-  }, [card.id]);
 
   const folder = card.arcana === ArcanaType.MAJOR ? 'major' : 'minor';
   const baseUrl = import.meta.env.BASE_URL || '/';
   const normalizedBaseUrl = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
   const imagePath = `${normalizedBaseUrl}cards/${folder}/${card.imageFileName}`;
+
+  useEffect(() => {
+    setImageError(false);
+  }, [imagePath]);
 
   return (
     <div 
@@ -95,11 +93,11 @@ const CardComponent: React.FC<CardComponentProps> = ({ card, isRevealed, onClick
               {/* Real Card Image */}
               {!imageError && (
                 <img 
+                  key={imagePath}
                   src={imagePath} 
                   alt={card.nameRu}
-                  onLoad={() => setIsImageLoaded(true)}
                   onError={() => setImageError(true)}
-                  className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 z-20 ${isImageLoaded ? 'opacity-100' : 'opacity-0'} ${card.isReversed ? 'rotate-180' : ''}`}
+                  className={`absolute inset-0 w-full h-full object-cover z-20 ${card.isReversed ? 'rotate-180' : ''}`}
                 />
               )}
            </div>

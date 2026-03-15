@@ -1,32 +1,46 @@
 
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
 // https://vitejs.dev/config/
-export default defineConfig({
-  plugins: [react()],
-  server: {
-    proxy: {
-      // Эмуляция серверного прокси при локальной разработке
-      '/google-api': {
-        target: 'https://generativelanguage.googleapis.com',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/google-api/, ''),
-        // При разработке ключи берутся из .env или VITE_API_KEYS
-      },
-    },
-  },
-  build: {
-    chunkSizeWarningLimit: 1000,
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom'],
-          'vendor-icons': ['lucide-react'],
-          'vendor-ai': ['@google/genai'],
-          'vendor-utils': ['react-markdown'],
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+  const devKeys = (env.GEMINI_API_KEYS || env.VITE_API_KEYS || env.VITE_API_KEY || '')
+    .split(',')
+    .map((k) => k.trim())
+    .filter((k) => k.length > 5);
+
+  return {
+    plugins: [react()],
+    server: {
+      proxy: {
+        // Эмуляция серверного прокси при локальной разработке
+        '/google-api': {
+          target: 'https://generativelanguage.googleapis.com',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/google-api/, ''),
+          configure: (proxy) => {
+            proxy.on('proxyReq', (proxyReq) => {
+              if (devKeys.length > 0) {
+                proxyReq.setHeader('x-goog-api-key', devKeys[0]);
+              }
+            });
+          },
         },
       },
     },
-  },
+    build: {
+      chunkSizeWarningLimit: 1000,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'vendor-react': ['react', 'react-dom'],
+            'vendor-icons': ['lucide-react'],
+            'vendor-ai': ['@google/genai'],
+            'vendor-utils': ['react-markdown'],
+          },
+        },
+      },
+    },
+  };
 });
