@@ -255,9 +255,9 @@ const SettingsModal: React.FC<{ config: AIConfig; onConfigChange: (config: AICon
             <div className="space-y-2">
               <label className="text-xs uppercase text-slate-400 tracking-widest font-bold">Модель AI</label>
               <select value={config.model} onChange={(e) => onConfigChange({ ...config, model: e.target.value })} className="w-full bg-slate-950 border border-slate-700 text-slate-200 p-2 text-sm rounded focus:border-amber-500 outline-none">
-                <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
-                <option value="gemini-flash-lite-latest">Gemini Flash Lite</option>
-                <option value="gemini-3-pro-preview">Gemini 3 Pro</option>
+                <option value="gemini-3-flash-preview">Gemini 3 Flash Preview (рекомендуется)</option>
+                <option value="gemini-3.1-flash-lite-preview">Gemini 3.1 Flash-Lite Preview</option>
+                <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
               </select>
             </div>
             <div className="space-y-2">
@@ -426,6 +426,7 @@ const App: React.FC = () => {
   const [readingText, setReadingText] = useState<string>('');
   const [apiError, setApiError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingHint, setLoadingHint] = useState('Трактовка знаков...');
   const [isQuestionExpanded, setIsQuestionExpanded] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
@@ -525,7 +526,7 @@ const App: React.FC = () => {
     let spread = SPREADS[2];
     try {
       const spreadId = await Promise.race([
-        selectBestSpread(normalizedQuestion, SPREADS, aiConfig),
+        selectBestSpread(normalizedQuestion, SPREADS, aiConfig, setLoadingHint),
         new Promise<string>((_, reject) => setTimeout(() => reject('timeout'), 15000))
       ]);
       spread = SPREADS.find(s => s.id === spreadId) || SPREADS[2];
@@ -550,9 +551,10 @@ const App: React.FC = () => {
     setIsLoading(true);
     setAppState('reading');
     setApiError(null);
+    setLoadingHint('Трактовка знаков...');
 
     try {
-      const text = await getTarotReading(currentQuestion, currentSpread, cards, aiConfig);
+      const text = await getTarotReading(currentQuestion, currentSpread, cards, aiConfig, setLoadingHint);
       setReadingText(text || "Оракул промолчал...");
 
       setReadingsCount(prev => {
@@ -568,11 +570,12 @@ const App: React.FC = () => {
         cards_count: cards.length,
       });
     } catch (err: any) {
-      setApiError(err.message || "Ошибка соединения");
+      const message = String(err?.message || '').trim();
+      setApiError(message.length > 0 ? message : "Ошибка соединения с сервисом ИИ");
 
       trackAnalyticsEvent('reading_error', {
         spread_id: currentSpread.id,
-        error_message: String(err?.message || 'unknown_error').slice(0, 200)
+        error_message: (message || 'unknown_error').slice(0, 200)
       });
     } finally {
       setIsLoading(false);
@@ -887,7 +890,7 @@ const App: React.FC = () => {
                 {isLoading ? (
                   <div className="flex flex-col items-center gap-6 py-12">
                     <Loader2 className="animate-spin text-amber-500 w-12 h-12" />
-                    <span className="font-serif text-amber-200/60 tracking-widest uppercase animate-pulse text-sm">Трактовка знаков...</span>
+                    <span className="font-serif text-amber-200/60 tracking-widest uppercase animate-pulse text-sm">{loadingHint}</span>
                   </div>
                 ) : apiError ? (
                   <div className="bg-red-950/30 border border-red-900/50 p-6 rounded-lg text-red-200">
@@ -1020,7 +1023,7 @@ const App: React.FC = () => {
             rel="noopener noreferrer"
             className="hover:text-amber-300 transition-colors"
           >
-            (c) 2025 Petergluk
+            © 2026 Petergluk
           </a>
           <span className="text-slate-600">|</span>
           <button

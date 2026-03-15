@@ -8,13 +8,52 @@ export interface AIConfig {
   temperature?: number;
   model?: string;
 }
+type ProgressCallback = (message: string) => void;
 
 // Retry helper: retries on 503/429 with exponential backoff
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+const REQUEST_TIMEOUT_MS = 12000;
+const ATTEMPTS_PER_MODEL = 2;
+
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> => {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error(`Request timeout after ${timeoutMs}ms`)), timeoutMs);
+    })
+  ]);
+};
+
+const extractErrorMessage = (e: any): string => {
+  const candidates = [
+    e?.message,
+    e?.error?.message,
+    e?.details,
+    e?.cause?.message,
+    e?.response?.data?.error?.message,
+    e?.response?.error?.message
+  ];
+  const msg = candidates.find((c) => typeof c === 'string' && c.trim().length > 0);
+  if (msg) return msg;
+  if (e?.status || e?.code) {
+    return `Service error (${e.status || e.code})`;
+  }
+  return 'Unknown Error';
+};
+
+const buildModelCandidates = (preferred?: string): string[] => {
+  const fallbackModels = [
+    'gemini-3-flash-preview',
+    'gemini-3.1-flash-lite-preview',
+    'gemini-2.5-pro'
+  ];
+  const ordered = [preferred || '', ...fallbackModels].filter(Boolean);
+  return [...new Set(ordered)];
+};
 
 const isRetryableError = (e: any): boolean => {
-  const msg = (e?.message || '').toLowerCase();
-  return msg.includes('503') || msg.includes('429') || msg.includes('unavailable') || msg.includes('high demand') || msg.includes('quota');
+  const msg = extractErrorMessage(e).toLowerCase();
+  return msg.includes('503') || msg.includes('429') || msg.includes('500') || msg.includes('unavailable') || msg.includes('high demand') || msg.includes('quota') || msg.includes('timeout');
 };
 
 /**
@@ -68,7 +107,8 @@ export const DEFAULT_SYSTEM_PROMPT = `Ты великий мудрец и ора
 export const selectBestSpread = async (
   question: string,
   availableSpreads: Spread[],
-  config?: AIConfig
+  config?: AIConfig,
+  onProgress?: ProgressCallback
 ): Promise<string> => {
   const normalizedQuestion = question.toLowerCase();
 
@@ -94,6 +134,7 @@ export const selectBestSpread = async (
 
   const keys = getAllApiKeys();
   if (keys.length === 0) return "three_card_classic";
+  const modelCandidates = buildModelCandidates(config?.model);
 
   const spreadOptions = availableSpreads.map(s => ({
     id: s.id,
@@ -103,40 +144,46 @@ export const selectBestSpread = async (
 
   const prompt = `You are a Master Tarot Reader. Question: "${question}". Return ONLY the JSON with the selected spreadId from this list: ${JSON.stringify(spreadOptions)}. Result format: {"spreadId": "id"}`;
 
-  for (const apiKey of keys) {
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        const ai = new GoogleGenAI({
-          apiKey,
-          httpOptions: { baseUrl: getBaseUrl() }
-        });
+  for (const model of modelCandidates) {
+    for (const apiKey of keys) {
+      for (let attempt = 0; attempt < ATTEMPTS_PER_MODEL; attempt++) {
+        onProgress?.(`Подбираем расклад: ${model}, попытка ${attempt + 1}/${ATTEMPTS_PER_MODEL}`);
+        try {
+          const ai = new GoogleGenAI({
+            apiKey,
+            httpOptions: { baseUrl: getBaseUrl() }
+          });
 
-        const response = await ai.models.generateContent({
-          model: config?.model || "gemini-3-flash-preview",
-          contents: prompt,
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                spreadId: { type: Type.STRING },
-              },
-              required: ["spreadId"]
+          const response = await withTimeout(ai.models.generateContent({
+            model,
+            contents: prompt,
+            config: {
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  spreadId: { type: Type.STRING },
+                },
+                required: ["spreadId"]
+              }
             }
-          }
-        });
+          }));
 
-        const cleanText = (response.text || "{}").replace(/```json/gi, '').replace(/```/g, '').trim();
-        const result = JSON.parse(cleanText);
-        return result.spreadId || "three_card_classic";
-      } catch (e: any) {
-        if (isRetryableError(e) && attempt < 2) {
-          console.warn(`[Spread] 503/429 on attempt ${attempt + 1}, retrying in ${(attempt + 1) * 2}s...`);
-          await sleep((attempt + 1) * 2000);
-          continue;
+          const cleanText = (response.text || "{}").replace(/```json/gi, '').replace(/```/g, '').trim();
+          const result = JSON.parse(cleanText);
+          return result.spreadId || "three_card_classic";
+        } catch (e: any) {
+          const message = extractErrorMessage(e);
+          if (isRetryableError(e) && attempt < ATTEMPTS_PER_MODEL - 1) {
+            console.warn(`[Spread] retry ${attempt + 1} for model ${model}: ${message}`);
+            onProgress?.(`Ключ не ответил, повторяем попытку...`);
+            await sleep((attempt + 1) * 1200);
+            continue;
+          }
+          console.warn(`[Spread] model ${model} failed: ${message}`);
+          onProgress?.(`Модель ${model} недоступна, пробуем следующую...`);
+          break; // try next key or model
         }
-        console.warn(`[Spread] Attempt failed:`, e.message);
-        break; // try next key
       }
     }
   }
@@ -148,12 +195,14 @@ export const getTarotReading = async (
   question: string,
   spread: Spread,
   cards: DrawnCard[],
-  config?: AIConfig
+  config?: AIConfig,
+  onProgress?: ProgressCallback
 ): Promise<string> => {
   const keys = getAllApiKeys();
   if (keys.length === 0) {
     throw new Error("API ключи не найдены.");
   }
+  const modelCandidates = buildModelCandidates(config?.model);
 
   let cardDescription = "";
   cards.forEach((card, idx) => {
@@ -178,34 +227,40 @@ export const getTarotReading = async (
 
   let lastError = "";
 
-  for (const apiKey of keys) {
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        const ai = new GoogleGenAI({
-          apiKey,
-          httpOptions: { baseUrl: getBaseUrl() }
-        });
+  for (const model of modelCandidates) {
+    for (const apiKey of keys) {
+      for (let attempt = 0; attempt < ATTEMPTS_PER_MODEL; attempt++) {
+        onProgress?.(`Пробуем ${model}: попытка ${attempt + 1}/${ATTEMPTS_PER_MODEL}`);
+        try {
+          const ai = new GoogleGenAI({
+            apiKey,
+            httpOptions: { baseUrl: getBaseUrl() }
+          });
 
-        const response = await ai.models.generateContent({
-          model: config?.model || "gemini-3-flash-preview",
-          contents: prompt,
-          config: {
-            temperature: config?.temperature ?? 1.1,
-            systemInstruction: config?.systemPrompt || DEFAULT_SYSTEM_PROMPT
+          const response = await withTimeout(ai.models.generateContent({
+            model,
+            contents: prompt,
+            config: {
+              temperature: config?.temperature ?? 1.1,
+              systemInstruction: config?.systemPrompt || DEFAULT_SYSTEM_PROMPT
+            }
+          }));
+
+          if (response.text) return response.text;
+          lastError = `Empty response from model ${model}`;
+        } catch (e: any) {
+          lastError = extractErrorMessage(e);
+
+          if (isRetryableError(e) && attempt < ATTEMPTS_PER_MODEL - 1) {
+            console.warn(`[Reading] retry ${attempt + 1} for model ${model}: ${lastError}`);
+            onProgress?.(`Ключ не ответил, пробуем снова...`);
+            await sleep((attempt + 1) * 1200);
+            continue;
           }
-        });
-
-        if (response.text) return response.text;
-      } catch (e: any) {
-        lastError = e.message || "Unknown Error";
-
-        if (isRetryableError(e) && attempt < 2) {
-          console.warn(`[Reading] 503/429 on attempt ${attempt + 1}, retrying in ${(attempt + 1) * 2}s...`);
-          await sleep((attempt + 1) * 2000);
-          continue;
+          console.error(`[Reading] model ${model} failed: ${lastError}`);
+          onProgress?.(`Не сработало на ${model}, переключаем модель...`);
+          break; // try next key or model
         }
-        console.error(`[Reading] Attempt failed: ${lastError}`);
-        break; // try next key
       }
     }
   }
