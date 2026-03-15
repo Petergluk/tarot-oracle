@@ -2,7 +2,7 @@
 // App.tsx
 // v3.8.0 @ 2025-05-21
 import React, { useState, useCallback, useEffect } from 'react';
-import { Loader2, Sparkles, RefreshCw, Eye, ChevronDown, Settings, X, AlertCircle, Info, Coffee, Star } from 'lucide-react';
+import { Loader2, Sparkles, RefreshCw, Eye, ChevronDown, Settings, X, AlertCircle, Info, Coffee, Star, Copy, Check } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
 // Internal imports
@@ -12,6 +12,83 @@ import { getTarotReading, selectBestSpread, AIConfig, DEFAULT_SYSTEM_PROMPT } fr
 import CardComponent from './components/CardComponent';
 
 type ExtendedAppState = AppState | 'consulting';
+
+const LOCAL_STATS_KEYS = {
+  startedAt: 'oracle_stats_started_at',
+  totalVisitors: 'oracle_stats_total_visitors',
+  totalQuestions: 'oracle_stats_total_questions',
+  todayDate: 'oracle_stats_today_date',
+  todayQuestions: 'oracle_stats_today_questions',
+  todayVisitors: 'oracle_stats_today_visitors',
+  visitorMarker: 'oracle_stats_visitor_marked'
+} as const;
+
+const getTodayDate = () => new Date().toISOString().slice(0, 10);
+
+const toInt = (value: string | null, fallback = 0): number => {
+  const num = Number.parseInt(value || '', 10);
+  return Number.isFinite(num) ? num : fallback;
+};
+
+const ensureLocalStatsInitialized = () => {
+  const today = getTodayDate();
+  if (!localStorage.getItem(LOCAL_STATS_KEYS.startedAt)) {
+    localStorage.setItem(LOCAL_STATS_KEYS.startedAt, new Date().toISOString());
+  }
+  const storedDate = localStorage.getItem(LOCAL_STATS_KEYS.todayDate);
+  if (storedDate !== today) {
+    localStorage.setItem(LOCAL_STATS_KEYS.todayDate, today);
+    localStorage.setItem(LOCAL_STATS_KEYS.todayQuestions, '0');
+    localStorage.setItem(LOCAL_STATS_KEYS.todayVisitors, '0');
+  }
+};
+
+const ensureLocalVisitorTracked = () => {
+  try {
+    ensureLocalStatsInitialized();
+    if (localStorage.getItem(LOCAL_STATS_KEYS.visitorMarker) === 'true') return;
+
+    const totalVisitors = toInt(localStorage.getItem(LOCAL_STATS_KEYS.totalVisitors));
+    const todayVisitors = toInt(localStorage.getItem(LOCAL_STATS_KEYS.todayVisitors));
+
+    localStorage.setItem(LOCAL_STATS_KEYS.totalVisitors, String(totalVisitors + 1));
+    localStorage.setItem(LOCAL_STATS_KEYS.todayVisitors, String(todayVisitors + 1));
+    localStorage.setItem(LOCAL_STATS_KEYS.visitorMarker, 'true');
+  } catch {
+    // ignore localStorage errors
+  }
+};
+
+const recordLocalQuestion = () => {
+  try {
+    ensureLocalStatsInitialized();
+    const totalQuestions = toInt(localStorage.getItem(LOCAL_STATS_KEYS.totalQuestions));
+    const todayQuestions = toInt(localStorage.getItem(LOCAL_STATS_KEYS.todayQuestions));
+    localStorage.setItem(LOCAL_STATS_KEYS.totalQuestions, String(totalQuestions + 1));
+    localStorage.setItem(LOCAL_STATS_KEYS.todayQuestions, String(todayQuestions + 1));
+  } catch {
+    // ignore localStorage errors
+  }
+};
+
+const getLocalStatsSnapshot = () => {
+  const now = Date.now();
+  const startedAtRaw = localStorage.getItem(LOCAL_STATS_KEYS.startedAt) || new Date().toISOString();
+  const startedAtMs = Date.parse(startedAtRaw);
+  const uptimeSec = Number.isFinite(startedAtMs) ? Math.max(0, Math.round((now - startedAtMs) / 1000)) : 0;
+
+  return {
+    startedAt: startedAtRaw,
+    totalVisitors: toInt(localStorage.getItem(LOCAL_STATS_KEYS.totalVisitors)),
+    uniqueVisitors: toInt(localStorage.getItem(LOCAL_STATS_KEYS.todayVisitors)),
+    totalQuestions: toInt(localStorage.getItem(LOCAL_STATS_KEYS.totalQuestions)),
+    todayQuestions: toInt(localStorage.getItem(LOCAL_STATS_KEYS.todayQuestions)),
+    todayDate: localStorage.getItem(LOCAL_STATS_KEYS.todayDate) || getTodayDate(),
+    uptime: `${uptimeSec}s`,
+    db: false,
+    source: 'local'
+  };
+};
 
 const shuffleDeck = (cards: TarotCard[]): TarotCard[] => {
   const deck = [...cards];
@@ -53,26 +130,92 @@ const getCardMeaning = (card: DrawnCard) => {
   return card.description;
 };
 
+const trackAnalyticsEvent = (eventName: string, params: Record<string, unknown> = {}) => {
+  if (typeof window === 'undefined') return;
+  const w = window as any;
+
+  if (typeof w.gtag === 'function') {
+    w.gtag('event', eventName, params);
+  }
+
+  if (typeof w.ym === 'function') {
+    w.ym(107710413, 'reachGoal', eventName, params);
+  }
+};
+
+interface QuestionLogItem {
+  id: string | number;
+  asked_at: string;
+  question_text: string;
+}
+
 const SettingsModal: React.FC<{ config: AIConfig; onConfigChange: (config: AIConfig) => void; onClose: () => void; }> = ({ config, onConfigChange, onClose }) => {
-  const [activeTab, setActiveTab] = useState<'settings' | 'stats'>('settings');
+  const [activeTab, setActiveTab] = useState<'settings' | 'stats' | 'logs'>('settings');
   const [stats, setStats] = useState<any>(null);
   const [loadingStats, setLoadingStats] = useState(false);
+  const [logs, setLogs] = useState<QuestionLogItem[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+  const [logsError, setLogsError] = useState<string | null>(null);
 
   React.useEffect(() => {
     if (activeTab === 'stats') {
       setLoadingStats(true);
-      fetch('/api/stats')
-        .then(res => res.json())
+      fetch('/api/stats', { cache: 'no-store' })
+        .then(async (res) => {
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return res.json();
+        })
         .then(data => {
-          setStats(data);
+          setStats({ ...getLocalStatsSnapshot(), ...data });
           setLoadingStats(false);
         })
-        .catch(err => {
-          console.error("Failed to load stats:", err);
+        .catch(() => {
+          setStats(getLocalStatsSnapshot());
           setLoadingStats(false);
         });
     }
   }, [activeTab]);
+
+  React.useEffect(() => {
+    if (activeTab !== 'logs') return;
+
+    setLoadingLogs(true);
+    setLogsError(null);
+    fetch('/api/questions?limit=300', { cache: 'no-store' })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((data) => {
+        setLogs(Array.isArray(data?.logs) ? data.logs : []);
+        setLoadingLogs(false);
+      })
+      .catch(() => {
+        setLogsError('Не удалось загрузить вопросы.');
+        setLoadingLogs(false);
+      });
+  }, [activeTab]);
+
+  const downloadLogs = (format: 'json' | 'txt') => {
+    const now = new Date();
+    const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+    const content = format === 'json'
+      ? JSON.stringify(logs, null, 2)
+      : logs
+          .map((item) => `[${new Date(item.asked_at).toLocaleString('ru-RU')}] ${item.question_text}`)
+          .join('\n');
+
+    const blob = new Blob([content], { type: format === 'json' ? 'application/json;charset=utf-8' : 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `oracle-questions-${stamp}.${format}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 font-sans text-left">
@@ -98,6 +241,12 @@ const SettingsModal: React.FC<{ config: AIConfig; onConfigChange: (config: AICon
             className={`flex-1 pb-3 text-center transition-colors ${activeTab === 'stats' ? 'text-amber-500 border-b-2 border-amber-500' : 'text-slate-500 hover:text-slate-300'}`}
           >
             Статистика
+          </button>
+          <button
+            onClick={() => setActiveTab('logs')}
+            className={`flex-1 pb-3 text-center transition-colors ${activeTab === 'logs' ? 'text-amber-500 border-b-2 border-amber-500' : 'text-slate-500 hover:text-slate-300'}`}
+          >
+            Логи
           </button>
         </div>
 
@@ -156,9 +305,51 @@ const SettingsModal: React.FC<{ config: AIConfig; onConfigChange: (config: AICon
                 </div>
 
                 <div className="col-span-2 mt-4 pt-4 border-t border-slate-800 text-[10px] text-slate-500 uppercase tracking-widest flex justify-between">
-                  <span>База данных: {stats.db ? <span className="text-green-500">PostgreSQL</span> : <span className="text-amber-500">In-Memory</span>}</span>
+                  <span>База данных: {stats.db ? <span className="text-green-500">PostgreSQL</span> : <span className="text-amber-500">Local/In-Memory</span>}</span>
                   <span>Uptime: {stats.uptime}</span>
                 </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'logs' && (
+          <div className="space-y-4 animate-fade-in text-slate-300">
+            <div className="flex gap-2">
+              <button
+                onClick={() => downloadLogs('txt')}
+                disabled={logs.length === 0}
+                className="flex-1 py-2 px-3 text-xs uppercase tracking-widest border border-slate-700 rounded hover:border-amber-500 disabled:opacity-40"
+              >
+                Скачать TXT
+              </button>
+              <button
+                onClick={() => downloadLogs('json')}
+                disabled={logs.length === 0}
+                className="flex-1 py-2 px-3 text-xs uppercase tracking-widest border border-slate-700 rounded hover:border-amber-500 disabled:opacity-40"
+              >
+                Скачать JSON
+              </button>
+            </div>
+
+            {loadingLogs ? (
+              <div className="flex justify-center items-center py-10">
+                <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
+              </div>
+            ) : logsError ? (
+              <div className="text-center py-10 text-red-400 text-sm">{logsError}</div>
+            ) : logs.length === 0 ? (
+              <div className="text-center py-10 text-slate-500 text-sm">Пока нет сохраненных вопросов</div>
+            ) : (
+              <div className="max-h-[52vh] overflow-y-auto space-y-2 pr-1">
+                {logs.map((item) => (
+                  <div key={String(item.id)} className="bg-slate-950 border border-slate-800 rounded p-3">
+                    <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-2">
+                      {new Date(item.asked_at).toLocaleString('ru-RU')}
+                    </div>
+                    <div className="text-sm text-slate-200 leading-relaxed break-words">{item.question_text}</div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -239,6 +430,8 @@ const App: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
   const [secretClickCount, setSecretClickCount] = useState(0);
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'ok' | 'error'>('idle');
+  const [footerStats, setFooterStats] = useState<{ totalQuestions: number }>({ totalQuestions: 0 });
   const [readingsCount, setReadingsCount] = useState<number>(() => {
     try {
       return parseInt(localStorage.getItem('oracle_readings_count') || '0', 10);
@@ -249,6 +442,7 @@ const App: React.FC = () => {
   const [dismissedPwaHint, setDismissedPwaHint] = useState<boolean>(() => {
     return localStorage.getItem('oracle_dismissed_pwa') === 'true';
   });
+  const [canShowPwaHint, setCanShowPwaHint] = useState(false);
   const [remainingDeck, setRemainingDeck] = useState<TarotCard[]>([]);
   const [galleryIndex, setGalleryIndex] = useState<number | null>(null);
   const [revealFlashIndex, setRevealFlashIndex] = useState<number | null>(null);
@@ -259,17 +453,79 @@ const App: React.FC = () => {
     model: 'gemini-3-flash-preview'
   });
 
+  React.useEffect(() => {
+    ensureLocalVisitorTracked();
+  }, []);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const nav = navigator as Navigator & { standalone?: boolean };
+    const isStandalone =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      window.matchMedia('(display-mode: fullscreen)').matches ||
+      nav.standalone === true;
+
+    const ua = navigator.userAgent || '';
+    const isMobileUa = /Android|iPhone|iPad|iPod/i.test(ua);
+    const isLikelyTouchMac = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+    const isMobileDevice = isMobileUa || isLikelyTouchMac;
+
+    setCanShowPwaHint(isMobileDevice && !isStandalone);
+  }, []);
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    const loadFooterStats = async () => {
+      try {
+        const res = await fetch('/api/stats', { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (!cancelled) {
+          setFooterStats({ totalQuestions: Number(data?.totalQuestions) || 0 });
+        }
+      } catch {
+        const local = getLocalStatsSnapshot();
+        if (!cancelled) {
+          setFooterStats({ totalQuestions: Number(local?.totalQuestions) || 0 });
+        }
+      }
+    };
+
+    loadFooterStats();
+    const intervalId = window.setInterval(loadFooterStats, 60000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
   const handleQuestionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!question.trim()) return;
+    const normalizedQuestion = question.trim();
 
     setAppState('consulting');
     setApiError(null);
 
+    trackAnalyticsEvent('question_submitted', {
+      question_length: normalizedQuestion.length,
+    });
+
+    fetch('/api/questions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: normalizedQuestion })
+    }).catch(() => {
+      // Silent fail: reading flow should not break on logging issue.
+    });
+
     let spread = SPREADS[2];
     try {
       const spreadId = await Promise.race([
-        selectBestSpread(question, SPREADS, aiConfig),
+        selectBestSpread(normalizedQuestion, SPREADS, aiConfig),
         new Promise<string>((_, reject) => setTimeout(() => reject('timeout'), 15000))
       ]);
       spread = SPREADS.find(s => s.id === spreadId) || SPREADS[2];
@@ -304,8 +560,20 @@ const App: React.FC = () => {
         localStorage.setItem('oracle_readings_count', next.toString());
         return next;
       });
+      recordLocalQuestion();
+      setFooterStats(prev => ({ totalQuestions: prev.totalQuestions + 1 }));
+
+      trackAnalyticsEvent('reading_generated', {
+        spread_id: currentSpread.id,
+        cards_count: cards.length,
+      });
     } catch (err: any) {
       setApiError(err.message || "Ошибка соединения");
+
+      trackAnalyticsEvent('reading_error', {
+        spread_id: currentSpread.id,
+        error_message: String(err?.message || 'unknown_error').slice(0, 200)
+      });
     } finally {
       setIsLoading(false);
     }
@@ -347,6 +615,49 @@ const App: React.FC = () => {
     if (!selectedSpread) return;
     if (revealedCount !== selectedSpread.cardCount) return;
     fetchFinalReading(question, selectedSpread, drawnCards);
+  };
+
+  const copyReadingWithCards = async () => {
+    const cardsText = drawnCards
+      .slice(0, revealedCount)
+      .map((card, idx) => {
+        const position = selectedSpread?.positions[idx]?.name || `Позиция ${idx + 1}`;
+        const orientation = card.isReversed ? 'перевернутая' : 'прямая';
+        return `${idx + 1}. ${position}: ${card.nameRu} (${orientation})`;
+      })
+      .join('\n');
+
+    const payload = [
+      `Вопрос: ${question}`,
+      `Расклад: ${selectedSpread?.name || '—'}`,
+      '',
+      'Выпавшие карты:',
+      cardsText || '—',
+      '',
+      'Ответ Оракула:',
+      readingText || '—'
+    ].join('\n');
+
+    try {
+      await navigator.clipboard.writeText(payload);
+      setCopyStatus('ok');
+    } catch {
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = payload;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        setCopyStatus('ok');
+      } catch {
+        setCopyStatus('error');
+      }
+    }
+
+    setTimeout(() => setCopyStatus('idle'), 1800);
   };
 
   useEffect(() => {
@@ -476,7 +787,7 @@ const App: React.FC = () => {
             Просить совета
           </button>
 
-          {readingsCount > 0 && !dismissedPwaHint && (
+          {readingsCount > 0 && !dismissedPwaHint && canShowPwaHint && (
             <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-md animate-slide-up group">
               <div className="bg-slate-800/80 border border-slate-700/80 rounded-xl p-4 sm:p-5 text-xs sm:text-sm text-amber-100/80 backdrop-blur-md shadow-2xl flex items-start gap-4 text-left relative pr-10">
                 <button
@@ -657,18 +968,37 @@ const App: React.FC = () => {
                     }}>
                       {readingText}
                     </ReactMarkdown>
-                    <div className="mt-16 flex flex-col sm:flex-row gap-4">
-                      <button onClick={resetApp} className="flex-1 py-5 border border-slate-700 hover:border-amber-500 hover:bg-amber-900/10 text-amber-100 font-serif uppercase tracking-widest transition-all">
-                        Задать иной вопрос
-                      </button>
-                      <a
-                        href="https://t.me/tribute/app?startapp=dsA1"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex-1 flex items-center justify-center gap-3 py-5 border border-amber-600/30 bg-amber-900/10 hover:bg-amber-800/20 text-amber-500 font-serif uppercase tracking-widest transition-all"
-                      >
-                        <Coffee className="w-5 h-5 shrink-0" /> Угостить Оракула кофе
-                      </a>
+                    <div className="mt-16">
+                      <div className="flex justify-center mb-6">
+                        <button
+                          onClick={copyReadingWithCards}
+                          className="w-14 h-14 rounded-full flex items-center justify-center border border-emerald-700/60 hover:border-emerald-500 hover:bg-emerald-900/10 text-emerald-200 transition-all"
+                          title={copyStatus === 'ok' ? 'Скопировано' : copyStatus === 'error' ? 'Ошибка копирования' : 'Копировать ответ'}
+                          aria-label={copyStatus === 'ok' ? 'Скопировано' : copyStatus === 'error' ? 'Ошибка копирования' : 'Копировать ответ'}
+                        >
+                          {copyStatus === 'ok' ? (
+                            <Check className="w-5 h-5" />
+                          ) : copyStatus === 'error' ? (
+                            <AlertCircle className="w-5 h-5" />
+                          ) : (
+                            <Copy className="w-5 h-5" />
+                          )}
+                        </button>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row gap-4">
+                        <button onClick={resetApp} className="w-full sm:flex-1 py-5 border border-slate-700 hover:border-amber-500 hover:bg-amber-900/10 text-amber-100 font-serif uppercase tracking-widest transition-all whitespace-nowrap">
+                          Задать новый вопрос
+                        </button>
+                        <a
+                          href="https://t.me/tribute/app?startapp=dsA1"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-full sm:flex-1 flex items-center justify-center gap-3 py-5 border border-amber-600/30 bg-amber-900/10 hover:bg-amber-800/20 text-amber-500 font-serif uppercase tracking-widest transition-all whitespace-nowrap"
+                        >
+                          <Coffee className="w-5 h-5 shrink-0" /> Угостить Оракула кофе
+                        </a>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -677,6 +1007,30 @@ const App: React.FC = () => {
           </div>
         </div>
       )}
+
+      <footer className="w-full border-t border-slate-800/80 bg-slate-950/60 backdrop-blur px-4 py-3 text-[11px] sm:text-xs text-slate-400">
+        <div className="max-w-4xl mx-auto flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center">
+          <span>
+            Оракул ответил на <span className="text-amber-400 font-semibold">{footerStats.totalQuestions}</span> вопросов
+          </span>
+          <span className="text-slate-600">|</span>
+          <a
+            href="https://www.danzasemantica.ru/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-amber-300 transition-colors"
+          >
+            (c) 2025 Petergluk
+          </a>
+          <span className="text-slate-600">|</span>
+          <button
+            onClick={() => setShowInfo(true)}
+            className="hover:text-amber-300 transition-colors"
+          >
+            О проекте
+          </button>
+        </div>
+      </footer>
     </main>
   );
 };

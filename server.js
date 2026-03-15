@@ -11,6 +11,7 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+app.use(express.json({ limit: '16kb' }));
 
 // API keys are read ONLY from server-side environment variables
 // They are NEVER exposed to the frontend bundle
@@ -39,9 +40,12 @@ const inMemoryStats = {
   startedAt: new Date().toISOString(),
   totalVisitors: 0,
   totalQuestions: 0,
+  todayVisitors: 0,
   todayQuestions: 0,
   todayDate: new Date().toISOString().slice(0, 10),
 };
+
+const inMemoryQuestionLogs = [];
 
 const initDB = async () => {
   if (!pool) return;
@@ -61,6 +65,13 @@ const initDB = async () => {
           total_questions INT DEFAULT 0
       );
     `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS question_logs (
+          id BIGSERIAL PRIMARY KEY,
+          asked_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          question_text TEXT NOT NULL
+      );
+    `);
 
     // Ensure global stats row exists
     const res = await pool.query("SELECT * FROM stats WHERE id = 'global'");
@@ -74,6 +85,51 @@ const initDB = async () => {
   }
 };
 
+const normalizeQuestion = (rawQuestion) => {
+  const question = String(rawQuestion || '').trim().replace(/\s+/g, ' ');
+  if (!question) return null;
+  return question.slice(0, 1000);
+};
+
+const recordQuestionLog = async (questionText) => {
+  if (!questionText) return;
+
+  if (!pool) {
+    inMemoryQuestionLogs.unshift({
+      id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      asked_at: new Date().toISOString(),
+      question_text: questionText
+    });
+    if (inMemoryQuestionLogs.length > 500) {
+      inMemoryQuestionLogs.length = 500;
+    }
+    return;
+  }
+
+  try {
+    await pool.query(
+      'INSERT INTO question_logs (question_text) VALUES ($1)',
+      [questionText]
+    );
+  } catch (e) {
+    console.error('[Proxy] Failed to save question log:', e.message);
+  }
+};
+
+const getQuestionLogs = async (limit = 200) => {
+  const safeLimit = Math.max(1, Math.min(Number(limit) || 100, 1000));
+
+  if (!pool) {
+    return inMemoryQuestionLogs.slice(0, safeLimit);
+  }
+
+  const res = await pool.query(
+    'SELECT id, asked_at, question_text FROM question_logs ORDER BY asked_at DESC LIMIT $1',
+    [safeLimit]
+  );
+  return res.rows;
+};
+
 const recordEvent = async (type) => {
   const today = new Date().toISOString().slice(0, 10);
 
@@ -81,9 +137,13 @@ const recordEvent = async (type) => {
     // In-memory fallback logic
     if (today !== inMemoryStats.todayDate) {
       inMemoryStats.todayDate = today;
+      inMemoryStats.todayVisitors = 0;
       inMemoryStats.todayQuestions = 0;
     }
-    if (type === 'visitor') inMemoryStats.totalVisitors++;
+    if (type === 'visitor') {
+      inMemoryStats.totalVisitors++;
+      inMemoryStats.todayVisitors++;
+    }
     if (type === 'question') {
       inMemoryStats.totalQuestions++;
       inMemoryStats.todayQuestions++;
@@ -165,10 +225,12 @@ app.get('/api/stats', async (req, res) => {
     const today = new Date().toISOString().slice(0, 10);
     if (today !== inMemoryStats.todayDate) {
       inMemoryStats.todayDate = today;
+      inMemoryStats.todayVisitors = 0;
       inMemoryStats.todayQuestions = 0;
     }
     return res.json({
       ...inMemoryStats,
+      uniqueVisitors: inMemoryStats.todayVisitors,
       uptime: Math.round(process.uptime()) + 's',
       db: false
     });
@@ -195,6 +257,30 @@ app.get('/api/stats', async (req, res) => {
   } catch (e) {
     console.error('Failed to fetch stats:', e);
     res.status(500).json({ error: 'Database error' });
+  }
+});
+
+app.post('/api/questions', async (req, res) => {
+  const question = normalizeQuestion(req.body?.question);
+  if (!question) {
+    return res.status(400).json({ error: 'Question is required' });
+  }
+
+  await recordQuestionLog(question);
+  return res.json({ ok: true });
+});
+
+app.get('/api/questions', async (req, res) => {
+  try {
+    const logs = await getQuestionLogs(req.query.limit);
+    return res.json({
+      logs,
+      total: logs.length,
+      db: Boolean(pool)
+    });
+  } catch (e) {
+    console.error('Failed to fetch question logs:', e);
+    return res.status(500).json({ error: 'Database error' });
   }
 });
 
